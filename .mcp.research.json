@@ -1,0 +1,52 @@
+{
+  "mcpServers": {
+    "github": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "github",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "research",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-github@2025.4.8"
+      ]
+    },
+    "exa": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "exa",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "research",
+        "--",
+        "npx", "-y", "mcp-remote", "https://mcp.exa.ai/mcp"
+      ]
+    },
+    "playwright": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "playwright",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "research",
+        "--",
+        "npx", "-y", "@playwright/mcp@0.0.69", "--isolated"
+      ]
+    },
+    "notes": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "notes",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "research",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/hismajesty/.chainwatch/notes"
+      ]
+    }
+  }
+}
