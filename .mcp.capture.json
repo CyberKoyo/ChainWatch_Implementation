@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "filesystem": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "filesystem",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "devwork",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/hismajesty/Documents"
+      ]
+    },
+    "memory": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "memory",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "devwork",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-memory@2026.1.26"
+      ]
+    },
+    "context7": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "context7",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "devwork",
+        "--",
+        "npx", "-y", "@upstash/context7-mcp@2.1.4"
+      ]
+    }
+  }
+}

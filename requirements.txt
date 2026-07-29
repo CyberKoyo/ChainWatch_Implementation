@@ -1,0 +1,18 @@
+# ChainWatch core -- the engine, proxy and daemon need only these.
+numpy>=1.26
+pyyaml>=6.0
+
+# Test suite.
+pytest>=8.0
+
+# AgentLAB replay harness only (agentlab_bridge/). Not needed to run ChainWatch
+# in front of a real MCP server.
+#   pydantic[email]  -- SHADE_Arena environments are pydantic models
+#   docstring_parser -- its functions_runtime parses tool docstrings
+#   rich, openai     -- imported at module load by the SHADE_Arena package
+#   pandas           -- required by the travel environment
+pydantic[email]>=2.0
+docstring_parser>=0.16
+rich>=13.0
+openai>=1.0
+pandas>=2.0
