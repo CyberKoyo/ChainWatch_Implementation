@@ -125,6 +125,13 @@ class AuditLog:
         if vector is not None:
             entry["v"] = [round(float(x), 4) for x in vector]
 
+        # Additive and optional, so both trace consumers keep working unchanged --
+        # they key on `session`, `call` and `v`, and skip what they do not know.
+        # Arrives as a Provenance in-process and as a bare string from the daemon.
+        provenance = getattr(verdict, "provenance", None)
+        if provenance is not None:
+            entry["prov"] = provenance if isinstance(provenance, str) else provenance.name
+
         try:
             self.directory.mkdir(parents=True, exist_ok=True)
             path = self.directory / f"{datetime.now(timezone.utc):%Y-%m-%d}.jsonl"

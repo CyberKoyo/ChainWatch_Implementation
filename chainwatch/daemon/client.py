@@ -38,6 +38,10 @@ def verdict_from_dict(payload: dict[str, Any]) -> Verdict:
         # numpy, so a daemon-backed verdict is indistinguishable from a local one to
         # anything that slices it -- which the audit log does.
         vector=None if vector is None else np.asarray(vector, dtype=np.float64),
+        # Kept as the bare name the daemon sent. Nothing downstream compares it to
+        # a Provenance member -- the audit log formats it, and the rules run
+        # daemon-side where the enum still exists.
+        provenance=payload.get("provenance"),
     )
     verdict.alerts = [
         Alert(

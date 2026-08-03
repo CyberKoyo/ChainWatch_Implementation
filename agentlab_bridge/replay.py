@@ -103,6 +103,10 @@ class ChainResult:
     #: from the feature vector alone.
     tools: list[str] = field(default_factory=list)
     servers: list[str] = field(default_factory=list)
+    #: Destination provenance per committed call, parallel to ``vectors``. Needed
+    #: offline for the same reason as ``servers``: it is deliberately not a feature
+    #: dimension, so it cannot be recovered from the vector.
+    provenances: list[str] = field(default_factory=list)
     error: str | None = None
     shape: str = ""
 
@@ -202,6 +206,7 @@ def replay_chain(chain: dict[str, Any], label: str, source: str = "agentlab") ->
     result.vectors = [record.vector.tolist() for record in history]
     result.tools = [record.tool for record in history]
     result.servers = [record.server for record in history]
+    result.provenances = [record.provenance.name for record in history]
 
     # Append the blocked call as a final observation. It is a real, fully-extracted
     # pre-flight vector -- the call simply never executed, so its OC dimensions stay
@@ -212,6 +217,9 @@ def replay_chain(chain: dict[str, Any], label: str, source: str = "agentlab") ->
         result.tools.append(blocked_step.get("tool_name", ""))
         result.servers.append(environment)
         result.stages.append(blocked.stage)
+        result.provenances.append(
+            blocked.provenance.name if blocked.provenance is not None else "UNKNOWN"
+        )
     # Deduplicate: pre-flight and post-response evaluate the same window.
     result.rules = sorted(set(result.rules), key=lambda pair: (pair[1], pair[0]))
     return result
@@ -310,13 +318,21 @@ class ResponseBinder:
 _MODEL_PATH: str | None = None
 
 
+#: What R3 does with an ATTESTED destination; ``--r3-attested`` swaps it. Defaults
+#: to the paper-literal reading, so every replayed figure is unchanged unless the
+#: flag is passed -- which is what makes the before/after comparison meaningful.
+_R3_ATTESTED: str = "ignore"
+
+
 def _fresh_analyzer():
     from chainwatch.engine.model import load_model
+    from chainwatch.engine.rules import RuleConfig
     from chainwatch.engine.session import SessionAnalyzer
 
+    config = RuleConfig(r3_attested_action=_R3_ATTESTED)
     if _MODEL_PATH:
-        return SessionAnalyzer(model=load_model(_MODEL_PATH))
-    return SessionAnalyzer()
+        return SessionAnalyzer(model=load_model(_MODEL_PATH), config=config)
+    return SessionAnalyzer(config=config)
 
 
 def _as_text(value: Any) -> str:
@@ -525,6 +541,11 @@ def write_traces(results: list[ChainResult], path: Path) -> int:
                             "server": result.servers[index] if index < len(result.servers) else None,
                             "stage": result.stages[index] if index < len(result.stages) else None,
                             "rules": sorted(set(fired.get(index + 1, []))),
+                            "prov": (
+                                result.provenances[index]
+                                if index < len(result.provenances)
+                                else None
+                            ),
                             "v": [round(x, 6) for x in vector],
                         },
                         separators=(",", ":"),
@@ -546,12 +567,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--traces", default=None, help="write feature vectors here as JSONL")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--model", default=None, help="trained model JSON; omit to use priors")
+    parser.add_argument(
+        "--r3-attested",
+        choices=("ignore", "downgrade", "suppress"),
+        default="ignore",
+        help=(
+            "what R3 does when the destination was named by a clean READ response "
+            "before the session referenced it; 'ignore' is the section IV-D reading"
+        ),
+    )
     options = parser.parse_args(argv)
 
-    global _MODEL_PATH
+    global _MODEL_PATH, _R3_ATTESTED
     _MODEL_PATH = options.model
     if _MODEL_PATH:
         print(f"using trained model {_MODEL_PATH}")
+    _R3_ATTESTED = options.r3_attested
+    if _R3_ATTESTED != "ignore":
+        print(f"R3 attested-destination action: {_R3_ATTESTED}")
 
     limit = None if options.all else (options.limit or 25)
     attack_chains = load_attack_chains(limit)
