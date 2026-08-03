@@ -39,6 +39,7 @@ from .features import (
     DF_CROSS_SERVER,
     DF_EXTERNAL_WRITE,
     PS_INDEX,
+    Provenance,
 )
 from .taxonomy import ToolCategory
 
@@ -52,6 +53,10 @@ class CallRecord:
     server: str
     vector: np.ndarray
     stage: int  # 1-6, matching the paper's numbering
+    #: Where this call's destination came from. Deliberately *not* a feature
+    #: dimension -- see features.Provenance. Defaults to UNKNOWN so every existing
+    #: construction site stays valid and fails closed.
+    provenance: Provenance = Provenance.UNKNOWN
 
     @property
     def category(self) -> ToolCategory:
@@ -101,6 +106,21 @@ class RuleConfig:
     #: requirement; the READ defaults to any stage.
     r3_network_stage_min: int = 5
     r3_read_stage_min: int = 1
+
+    #: What R3 does when the destination is ATTESTED -- named by the environment
+    #: in a clean READ response before the session ever referenced it.
+    #:
+    #: ``"ignore"`` is the default because section IV-D knows nothing about
+    #: recipients: recipient provenance is an *addition* to the specification,
+    #: not a reading of it, so the paper-literal behaviour stays the default and
+    #: the deviation is opted into -- the same discipline applied to
+    #: ``r3_read_stage_min`` for ambiguity A1. See CLAUDE.md ambiguity A4.
+    #:
+    #: ``"downgrade"`` keeps the alert but stops the block, which is the point:
+    #: every false positive measured in Phase 7 was a block, and a WARNING on a
+    #: legitimate payment costs a human a glance rather than costing the business
+    #: the payment. ``"suppress"`` drops the alert entirely.
+    r3_attested_action: str = "ignore"
 
     #: R4: "a stage jump of two or more positions".
     r4_min_jump: int = 2
@@ -195,14 +215,27 @@ def rule_r3(window: Sequence[CallRecord], config: RuleConfig) -> Alert | None:
     if source is None:
         return None
 
+    # Recipient provenance can only ever *lower* the severity, never raise one, so
+    # enabling it can cost detection but can never invent an alert. An ATTESTED
+    # destination is one the environment named in a clean READ before the session
+    # touched it -- a colleague out of the address book, not a payee the agent
+    # registered itself.
+    severity = Severity.CRITICAL
+    if current.provenance is Provenance.ATTESTED:
+        if config.r3_attested_action == "suppress":
+            return None
+        if config.r3_attested_action == "downgrade":
+            severity = Severity.WARNING
+
     return Alert(
         rule="R3",
-        severity=Severity.CRITICAL,
+        severity=severity,
         call_index=current.index,
         stage=current.stage,
         message=(
             f"exfiltration signature: {source.tool} (stage {source.stage}) read data "
-            f"now leaving via {current.tool} (stage {current.stage})"
+            f"now leaving via {current.tool} (stage {current.stage}); "
+            f"destination {current.provenance.name}"
         ),
     )
 

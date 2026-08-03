@@ -47,6 +47,15 @@ class ToolCategory(IntEnum):
 #: ``create_pr`` is recognised as data leaving the boundary rather than a local
 #: create. Plain reads fall through to the end, which is also the default, so an
 #: unrecognised tool is treated as the least alarming category.
+#:
+#: Reads appear *twice*, and the split is the load-bearing part. A block of
+#: observational **prefixes** sits high, above NETWORK, so a leading read verb
+#: beats a channel **suffix** (`search_contacts_by_email` is not egress) and so
+#: rule *inspection* is not swept up by the rule patterns that follow it. The
+#: trailing READ block is the fallback for names those prefixes do not cover.
+#: Moving a pattern between the two blocks changes the category of real tools:
+#: ``tests/test_features.py::test_scenario_tool_categories`` pins the 18 names the
+#: section V-B conformance gate depends on, and is the check to run first.
 DEFAULT_CATEGORY_PATTERNS: list[tuple[str, ToolCategory]] = [
     # --- CONFIGURE: mutating configuration, wiring, or the agent's own environment.
     # Kill chain stage 5 (Lateral Movement) leans on this; rule R5 blocks on it.
@@ -62,6 +71,44 @@ DEFAULT_CATEGORY_PATTERNS: list[tuple[str, ToolCategory]] = [
     ("*_settings", ToolCategory.CONFIGURE),
     ("set_permission*", ToolCategory.CONFIGURE),
     ("grant_*", ToolCategory.CONFIGURE),
+    # --- Observational verbs, hoisted above everything that follows.
+    # A read verb at the front of a name beats a channel *suffix* further down:
+    # `search_contacts_by_email` matched `*_email` and scored NETWORK, though
+    # looking a contact up in a local address book is not data leaving the
+    # boundary -- measured on a live capture, where two such calls carried a
+    # session to stage 2 by themselves. `get_daily_limit_zelle` did the same via
+    # `*_zelle`. Nothing is lost, because every NETWORK pattern that has to keep
+    # winning (`send_*`, `post_*`, `transfer_*`, `forward_*`, `redirect_*`,
+    # `share_*`, `upload_*`) is a *prefix*, and no outbound tool begins with a
+    # read verb. This block also protects rule *inspection* from the rule
+    # patterns immediately below it.
+    ("get_*", ToolCategory.READ),
+    ("list_*", ToolCategory.READ),
+    ("read_*", ToolCategory.READ),
+    ("search_*", ToolCategory.READ),
+    ("find_*", ToolCategory.READ),
+    ("view_*", ToolCategory.READ),
+    ("show_*", ToolCategory.READ),
+    ("fetch_*", ToolCategory.READ),
+    ("preview_*", ToolCategory.READ),
+    ("describe_*", ToolCategory.READ),
+    ("check_*", ToolCategory.READ),
+    ("query_*", ToolCategory.READ),
+    ("analyze_*", ToolCategory.READ),
+    ("count_*", ToolCategory.READ),
+    ("simulate_*", ToolCategory.READ),  # a dry run is not a configuration change
+    # --- CONFIGURE, continued: persistent behaviour rules.
+    # A mail filter rule is configuration in the sense R5 means: wiring that
+    # governs future behaviour, not a one-off write. Without these, every rule
+    # tool fell through to WRITE -- and `enable_disable_rule`, matching no verb at
+    # all, fell to the READ default while mutating persistent state. R5 could not
+    # fire on filter maintenance in either direction: route C's filter-maintenance
+    # recipes produced no CONFIGURE call at all, and the attack corpus carried one
+    # in 5 chains where it should have been 47.
+    ("*_rule", ToolCategory.CONFIGURE),
+    ("*_rules", ToolCategory.CONFIGURE),
+    ("*_rule_*", ToolCategory.CONFIGURE),
+    ("*_rules_*", ToolCategory.CONFIGURE),
     # --- NETWORK: data crossing the trust boundary outward.
     # Stage 6 (Exfiltration) and the receiving half of rule R3.
     ("send_*", ToolCategory.NETWORK),
@@ -177,6 +224,18 @@ FINANCIAL_VALUE_RE = re.compile(
 #: address is routine in a mail workflow and must not by itself trip rule R1.
 CONTACT_VALUE_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]{2,}\b")
 
+#: The structural arms of FINANCIAL_VALUE_RE, separated out because only these
+#: identify a *recipient*. The lexical arm ("account", "iban", "payee", ...) names
+#: a field, and a call whose arguments merely mention the word "iban" is not
+#: addressed to anybody -- note 22 records that arm scoring {"query": "IBAN"}
+#: exactly as high as a live transfer to one.
+#: Separators are permitted inside both: an IBAN is conventionally written in
+#: four-character groups, and a card number in fours. They are stripped from the
+#: token, so "GB29 NWBK 6016..." and "GB29NWBK6016..." are one destination rather
+#: than two.
+_IBAN_RE = re.compile(r"\b[A-Z]{2}\d{2}(?:[ -]?[A-Z0-9]){10,30}\b")
+_CARD_RE = re.compile(r"\b(?:\d[ -]?){13,19}\b")
+
 #: A base64-ish run long enough to be carrying a payload rather than an id.
 ENCODED_BLOB_RE = re.compile(r"[A-Za-z0-9+/]{32,}={0,2}")
 HEX_BLOB_RE = re.compile(r"\b[0-9a-fA-F]{64,}\b")
@@ -235,6 +294,16 @@ def shannon_entropy(value: str) -> float:
         counts[char] = counts.get(char, 0) + 1
     length = len(value)
     return -sum((c / length) * math.log2(c / length) for c in counts.values())
+
+
+def _strip_separators(value: str) -> str:
+    return re.sub(r"[ -]", "", value)
+
+
+def url_host(url: str) -> str:
+    """Bare lowercase host of a URL, credentials and port stripped."""
+    host = re.sub(r"^https?://", "", url, flags=re.IGNORECASE).split("/")[0]
+    return host.split("@")[-1].split(":")[0].lower()
 
 
 def looks_base64(value: str) -> bool:
@@ -334,9 +403,7 @@ class SensitivityScorer:
         return any(looks_base64(candidate) for candidate in ENCODED_BLOB_RE.findall(text))
 
     def _is_external(self, url: str) -> bool:
-        host = re.sub(r"^https?://", "", url, flags=re.IGNORECASE).split("/")[0]
-        host = host.split("@")[-1].split(":")[0].lower()
-        return host not in self.benign_hosts
+        return url_host(url) not in self.benign_hosts
 
     def _iter_strings(self, value: Any) -> Iterable[str]:
         """Flatten arbitrary JSON into the string leaves, keys included.
@@ -355,3 +422,44 @@ class SensitivityScorer:
                 yield from self._iter_strings(item)
         elif value is not None:
             yield str(value)
+
+
+def destination_tokens(arguments: Any, scorer: SensitivityScorer | None = None) -> set[str]:
+    """Destination-shaped values in a call's arguments, or in a response body.
+
+    A destination names *where value or data is going*: a mail recipient, an
+    account, an endpoint. Deliberately narrower than Parameter Sensitivity -- PS
+    asks how dangerous the arguments look, this asks who is on the receiving end.
+    It is not a feature dimension; see ``features.Provenance``.
+
+    Only the *structural* financial arms count. ``FINANCIAL_VALUE_RE``'s lexical
+    arm matches the words "account", "iban", "payee" and so on, which name a
+    field rather than a recipient -- a call whose arguments merely mention "iban"
+    is not addressed to anybody.
+
+    Phone numbers are deliberately absent. Note 9 records a bare ``\\d{8,17}``
+    scoring a phone number as a financial identifier and pushing a benign
+    WhatsApp message to Exfiltration; callers treat an empty set as fail-closed,
+    so leaving phones out loses no detection.
+
+    URLs reduce to their host. The same host on a different path is one
+    destination, and remembering full URLs would make attestation useless.
+    """
+    scorer = scorer or SensitivityScorer()
+    text = "\n".join(scorer._iter_strings(arguments))
+    if not text:
+        return set()
+
+    tokens: set[str] = set()
+    tokens.update(match.group(0).lower() for match in CONTACT_VALUE_RE.finditer(text))
+    tokens.update(_strip_separators(match.group(0)).upper() for match in _IBAN_RE.finditer(text))
+
+    # Cards are matched against text with the IBANs removed. An IBAN ends in a
+    # long digit run -- "GB29 NWBK 60161331926819" carries a 14-digit tail -- and
+    # left in place it would also register as a card number, splitting one
+    # destination into two and letting the fragment attest independently.
+    tokens.update(
+        _strip_separators(match.group(0)) for match in _CARD_RE.finditer(_IBAN_RE.sub(" ", text))
+    )
+    tokens.update(url_host(url) for url in URL_RE.findall(text) if scorer._is_external(url))
+    return tokens

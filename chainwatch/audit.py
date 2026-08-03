@@ -32,11 +32,26 @@ corpus captured for that purpose has no reason to retain the contents of real fi
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-DEFAULT_LOG_DIR = Path.home() / ".chainwatch" / "logs"
+
+def state_home() -> Path:
+    """Where trace logs and the daemon socket live.
+
+    ``CHAINWATCH_HOME`` is honoured because every capture script already reads it
+    (``scripts/capture*.sh``) to decide where to look for the socket. Until this
+    existed the variable was a fiction: the scripts relocated and the Python did
+    not, so setting it made a script watch a directory the daemon would never
+    create. The only symptom was cross-server state silently falling back to
+    per-process -- dim 9 and R2 dead, with nothing in the output to say so.
+    """
+    return Path(os.environ.get("CHAINWATCH_HOME") or (Path.home() / ".chainwatch"))
+
+
+DEFAULT_LOG_DIR = state_home() / "logs"
 
 REDACTED = "[REDACTED]"
 
@@ -109,6 +124,13 @@ class AuditLog:
             entry["args"] = REDACTED if blocked else arguments
         if vector is not None:
             entry["v"] = [round(float(x), 4) for x in vector]
+
+        # Additive and optional, so both trace consumers keep working unchanged --
+        # they key on `session`, `call` and `v`, and skip what they do not know.
+        # Arrives as a Provenance in-process and as a bare string from the daemon.
+        provenance = getattr(verdict, "provenance", None)
+        if provenance is not None:
+            entry["prov"] = provenance if isinstance(provenance, str) else provenance.name
 
         try:
             self.directory.mkdir(parents=True, exist_ok=True)

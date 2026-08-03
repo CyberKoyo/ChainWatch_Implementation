@@ -38,6 +38,10 @@ def verdict_from_dict(payload: dict[str, Any]) -> Verdict:
         # numpy, so a daemon-backed verdict is indistinguishable from a local one to
         # anything that slices it -- which the audit log does.
         vector=None if vector is None else np.asarray(vector, dtype=np.float64),
+        # Kept as the bare name the daemon sent. Nothing downstream compares it to
+        # a Provenance member -- the audit log formats it, and the rules run
+        # daemon-side where the enum still exists.
+        provenance=payload.get("provenance"),
     )
     verdict.alerts = [
         Alert(
@@ -55,11 +59,17 @@ def verdict_from_dict(payload: dict[str, Any]) -> Verdict:
 class DaemonSession:
     """Duck-type replacement for SessionAnalyzer, backed by the shared daemon."""
 
-    def __init__(self, connection: socket.socket) -> None:
+    def __init__(self, connection: socket.socket, session: str = "") -> None:
         self._socket = connection
         self._file = connection.makefile("rwb")
         # Unique per process, so two proxies cannot collide on a call key.
         self._keys = (f"{os.getpid()}-{n}" for n in itertools.count())
+        # The daemon keys one analyzer per session. Several proxied servers sharing a
+        # CHAINWATCH_SESSION therefore share a window -- which is the point, it is what
+        # makes dim 9 and R2 observable -- while two capture recipes do not. Sending
+        # nothing here pools every session a daemon ever sees into one timeline; a
+        # two-recipe run measured that as a single 26-call session.
+        self._session = session
 
     # ------------------------------------------------------------- SessionAnalyzer API
 
@@ -100,6 +110,10 @@ class DaemonSession:
     # ------------------------------------------------------------------ transport
 
     def _call(self, request: dict[str, Any]) -> dict[str, Any]:
+        # Stamped here rather than at each call site, so a new op cannot be added that
+        # silently reports into the wrong session's window.
+        if self._session:
+            request = {**request, "session": self._session}
         self._file.write((json.dumps(request, separators=(",", ":")) + "\n").encode())
         self._file.flush()
         line = self._file.readline()
@@ -118,26 +132,37 @@ class DaemonSession:
             pass
 
 
-def connect(socket_path: Path | str = DEFAULT_SOCKET_PATH, timeout: float = 2.0) -> DaemonSession:
+def connect(
+    socket_path: Path | str = DEFAULT_SOCKET_PATH,
+    timeout: float = 2.0,
+    session: str = "",
+) -> DaemonSession:
     """Connect to a running daemon, or raise ``OSError``."""
     connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     connection.settimeout(timeout)
     connection.connect(str(socket_path))
     connection.settimeout(None)
-    return DaemonSession(connection)
+    return DaemonSession(connection, session=session)
 
 
 def build_session_backend(
     config: RuleConfig | None = None,
     use_daemon: bool = True,
     socket_path: Path | str = DEFAULT_SOCKET_PATH,
+    session: str = "",
 ) -> Any:
-    """Return a daemon-backed session if one is available, else a local analyzer."""
+    """Return a daemon-backed session if one is available, else a local analyzer.
+
+    ``session`` is the caller's ``CHAINWATCH_SESSION``. It is passed in rather than
+    read from the environment here so the proxy has one source of truth for the id it
+    also writes into every trace line -- otherwise the analyzer could be grouping
+    calls one way while the corpus records them another.
+    """
     config = config or RuleConfig()
 
     if use_daemon:
         try:
-            return connect(socket_path)
+            return connect(socket_path, session=session)
         except OSError:
             sys.stderr.write(
                 f"[chainwatch] no daemon at {socket_path}; using local session state. "

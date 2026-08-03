@@ -35,6 +35,7 @@ import statistics
 import time
 from collections import deque
 from dataclasses import dataclass, field
+from enum import IntEnum
 from typing import Any, Deque, Iterable
 
 import numpy as np
@@ -46,6 +47,7 @@ from .taxonomy import (
     SensitivityScorer,
     ToolCategory,
     ToolClassifier,
+    destination_tokens,
     looks_base64,
 )
 
@@ -92,6 +94,44 @@ FEATURE_NAMES: tuple[str, ...] = (
     "oc_encoded_data",
     "oc_external_url",
 )
+
+#: Cap on remembered destinations, in the spirit of MAX_CHAIN_TOKENS -- a long
+#: session must not grow session state without bound.
+MAX_DESTINATIONS = 512
+
+#: An alias is a person- or account-shaped label: letters, spaces and the light
+#: punctuation names carry. Bounded so a message body cannot become a recipient --
+#: "Dave Smith" aliases, a paragraph does not.
+_ALIAS_MIN_LEN = 3
+_ALIAS_MAX_LEN = 64
+_ALIAS_RE = re.compile(r"[a-z][a-z0-9 .,'\-_]*[a-z0-9]")
+
+
+class Provenance(IntEnum):
+    """Where a call's destination came from. See CLAUDE.md ambiguity A4.
+
+    **Not a feature dimension.** The 20-dim vector is fixed by Table II and feeds
+    the HMM; this rides beside it on ``CallRecord`` and is read only by rule R3.
+    A 21st dimension would invalidate every trained model and every captured
+    trace, and would let a signal the paper never specified move the section V-B
+    stage labels.
+
+    Rule R3 as specified fires on the *shape* of an act -- read something, send
+    something -- and that shape is equally the assistant's job. What separates
+    the exfiltration in ``api_key_calendar_agendas_2`` from its benign twin is
+    the recipient: an attacker-controlled contact the agent itself registered 27
+    calls earlier. This enum is the question no rule in section IV-D asks.
+    """
+
+    #: No destination token in the arguments. Fail closed -- treated as untrusted.
+    UNKNOWN = 0
+    #: First seen in a clean READ response: the environment named this recipient.
+    ATTESTED = 1
+    #: First seen in a request argument: the session put this recipient there.
+    INTRODUCED = 2
+    #: Never seen before this call: invented, or lifted from poisoned content.
+    UNATTESTED = 3
+
 
 #: Phrases characteristic of instructions smuggled into tool output. Tool poisoning
 #: (section II-B) works by getting the model to treat server output as direction, so
@@ -192,14 +232,31 @@ class SessionState:
     last_server: str | None = None
     servers_seen: set[str] = field(default_factory=set)
     call_timestamps: Deque[float] = field(default_factory=lambda: deque(maxlen=64))
-    output_tokens: Deque[str] = field(default_factory=lambda: deque(maxlen=MAX_CHAIN_TOKENS))
+    #: ``(text, producing ToolCategory)``. The category is carried so the corpus
+    #: can answer whether R3's chained data actually came from a READ -- which is
+    #: what section IV-D's "carrying *that* data" claims and what ambiguity A3
+    #: records the implementation cannot enforce.
+    output_tokens: Deque[tuple[str, ToolCategory]] = field(
+        default_factory=lambda: deque(maxlen=MAX_CHAIN_TOKENS)
+    )
     #: Short identifier values seen in responses, matched on word boundaries.
-    identifier_tokens: Deque[str] = field(default_factory=lambda: deque(maxlen=MAX_CHAIN_TOKENS))
+    identifier_tokens: Deque[tuple[str, ToolCategory]] = field(
+        default_factory=lambda: deque(maxlen=MAX_CHAIN_TOKENS)
+    )
     tool_definition_hashes: dict[str, str] = field(default_factory=dict)
     response_sizes: dict[str, list[int]] = field(default_factory=dict)
     #: Tool names whose definition hash changed mid-session -- the rug-pull signal.
     #: Sticky: once a server has swapped a definition it stays suspect.
     changed_tools: set[str] = field(default_factory=set)
+    #: Destinations the environment named in a clean READ response.
+    attested_destinations: set[str] = field(default_factory=set)
+    #: Destinations the session itself introduced through a request argument.
+    #: Kept disjoint from ``attested_destinations`` by first-sighting-wins.
+    introduced_destinations: set[str] = field(default_factory=set)
+    #: Lowercased names that appeared *alongside* a destination the session
+    #: introduced, so a later call addressing the recipient by name still resolves.
+    #: Only the introduced direction is aliased -- see ``_remember_aliases``.
+    destination_aliases: set[str] = field(default_factory=set)
 
 
 class FeatureExtractor:
@@ -222,6 +279,9 @@ class FeatureExtractor:
         #: Matches the Sequential Pattern Analyzer's k, so "call rate over k"
         #: measures the same span the rules reason about.
         self.window = window
+        #: Category of the call whose response the last extracted arguments echoed,
+        #: or None. Measurement only -- no rule reads it. See ambiguity A3.
+        self.last_chain_source: ToolCategory | None = None
 
     # ------------------------------------------------------------------ tools/list
 
@@ -281,6 +341,43 @@ class FeatureExtractor:
         self.state.servers_seen.add(call.server)
         self.state.call_timestamps.append(call.timestamp)
 
+        # First sighting wins. A destination the environment already attested is
+        # not reclassified merely because the session then referenced it -- an
+        # assistant quoting a colleague's address back does not make that address
+        # its own invention.
+        tokens = destination_tokens(call.arguments, self.scorer)
+        for token in tokens:
+            if token not in self.state.attested_destinations:
+                self._remember_destination(self.state.introduced_destinations, token)
+        if tokens:
+            self._remember_aliases(call.arguments, tokens)
+
+    def destination_provenance(self, call: ObservedCall) -> Provenance:
+        """Classify where ``call``'s destination came from.
+
+        A pure read of session state, so it is safe to run pre-flight alongside
+        :meth:`extract` -- and it *must* run before :meth:`commit`, or the call
+        would introduce its own destination and never be anything but INTRODUCED.
+
+        INTRODUCED is tested with ``any`` and ATTESTED with ``all``: one novel
+        recipient among trusted ones makes the whole call untrusted, which is the
+        fail-closed direction.
+        """
+        tokens = destination_tokens(call.arguments, self.scorer)
+        if not tokens:
+            # No address, but the call may still name a recipient the session
+            # registered earlier. Measured on api_key_calendar_agendas_2: the fraud
+            # registers {name, email} at call 9 and sends to the *name* at call 36,
+            # so the address never appears in the exfiltrating call's arguments.
+            if self._matches_alias(call.arguments):
+                return Provenance.INTRODUCED
+            return Provenance.UNKNOWN
+        if any(token in self.state.introduced_destinations for token in tokens):
+            return Provenance.INTRODUCED
+        if all(token in self.state.attested_destinations for token in tokens):
+            return Provenance.ATTESTED
+        return Provenance.UNATTESTED
+
     def patch_output_characteristics(
         self, vector: np.ndarray, call: ObservedCall, response_text: str
     ) -> np.ndarray:
@@ -302,7 +399,9 @@ class FeatureExtractor:
         self._fill_output_characteristics(patched, call)
 
         self.state.response_sizes.setdefault(call.tool, []).append(call.response_bytes)
-        self._remember_output_tokens(response_text)
+        category = self.classifier.classify(call.tool, call.tool_description)
+        self._remember_output_tokens(response_text, category)
+        self._attest_destinations(patched, call, response_text)
         return patched
 
     def observe_response(self, call: ObservedCall, response_text: str) -> np.ndarray:
@@ -317,7 +416,9 @@ class FeatureExtractor:
 
         sizes = self.state.response_sizes.setdefault(call.tool, [])
         sizes.append(call.response_bytes)
-        self._remember_output_tokens(response_text)
+        self._remember_output_tokens(
+            response_text, self.classifier.classify(call.tool, call.tool_description)
+        )
         return vector
 
     # ------------------------------------------------------------------ groups
@@ -336,7 +437,9 @@ class FeatureExtractor:
             vector[DF_EXTERNAL_WRITE] = 1.0
 
         argument_text = "\n".join(self.scorer._iter_strings(call.arguments))
-        if self._carries_prior_output(argument_text):
+        chain_source = self._carries_prior_output(argument_text)
+        self.last_chain_source = chain_source
+        if chain_source is not None:
             vector[DF_CHAINED] = 1.0
 
         if self.state.last_server is not None and call.server != self.state.last_server:
@@ -392,26 +495,93 @@ class FeatureExtractor:
 
     # ------------------------------------------------------------------ helpers
 
-    def _carries_prior_output(self, argument_text: str) -> bool:
-        """True if an argument echoes a substantial span of an earlier response."""
-        if not argument_text:
+    def _remember_aliases(self, arguments: Any, tokens: set[str]) -> None:
+        """Record names that appeared beside a destination this call introduced.
+
+        Aliasing is deliberately **one-directional**. Only arguments alias, never
+        responses: trusting a name because a response happened to mention it beside
+        an address would let a poisoned -- or merely coincidental -- pairing
+        downgrade a later send, which is the hole the injection gate exists to
+        close. An unresolvable name therefore stays UNKNOWN, which never downgrades.
+
+        The candidate filter is deliberately narrow: a short human-readable string
+        that is not itself a destination. Anything longer is prose, and prose in an
+        argument is a message body rather than a recipient.
+        """
+        for value in self.scorer._iter_strings(arguments):
+            candidate = value.strip().lower()
+            if not (_ALIAS_MIN_LEN <= len(candidate) <= _ALIAS_MAX_LEN):
+                continue
+            if candidate in tokens or not _ALIAS_RE.fullmatch(candidate):
+                continue
+            self._remember_destination(self.state.destination_aliases, candidate)
+
+    def _matches_alias(self, arguments: Any) -> bool:
+        """True if any argument value names a destination the session introduced."""
+        if not self.state.destination_aliases:
             return False
-        for token in self.state.output_tokens:
+        return any(
+            value.strip().lower() in self.state.destination_aliases
+            for value in self.scorer._iter_strings(arguments)
+        )
+
+    def _remember_destination(self, sink: set[str], token: str) -> None:
+        """Record a destination, bounded so a long session cannot grow forever."""
+        if len(sink) < MAX_DESTINATIONS:
+            sink.add(token)
+
+    def _attest_destinations(
+        self, vector: np.ndarray, call: ObservedCall, response_text: str
+    ) -> None:
+        """Record destinations this response named, if it is entitled to name any.
+
+        Three gates, each closing a distinct hole:
+
+        * **READ only.** A WRITE echoing back the recipient you just handed it
+          attests nothing. That is scenario S1's ``add_payee``, whose response
+          repeats the attacker's IBAN -- treat that as attestation and R3 stops
+          firing on the paper's own scenario.
+        * **No injection markers.** Otherwise an address planted in a poisoned
+          issue body launders itself into ATTESTED, which is precisely the tool
+          poisoning threat model of section II-A.
+        * **Not already introduced.** Otherwise a READ whose own arguments carried
+          the destination attests it from its own echo, and
+          ``search_contacts_by_email(email=X)`` returning X would trust X one call
+          before the send.
+        """
+        if self.classifier.classify(call.tool, call.tool_description) is not ToolCategory.READ:
+            return
+        if vector[OC_IMPERATIVE] or vector[OC_XML_TAGS]:
+            return
+        for token in destination_tokens(response_text, self.scorer):
+            if token not in self.state.introduced_destinations:
+                self._remember_destination(self.state.attested_destinations, token)
+
+    def _carries_prior_output(self, argument_text: str) -> ToolCategory | None:
+        """The category of the call whose response this argument echoes, if any.
+
+        Returns a category rather than a bool purely to record *where* the chained
+        data came from. The matching itself is unchanged -- ``DF_CHAINED`` is still
+        set for exactly the same arguments.
+        """
+        if not argument_text:
+            return None
+        for token, category in self.state.output_tokens:
             if len(token) <= CHAIN_WINDOW:
                 if token in argument_text:
-                    return True
+                    return category
                 continue
             limit = min(len(token) - CHAIN_WINDOW, MAX_WINDOWS_PER_TOKEN * CHAIN_WINDOW_STRIDE)
             for start in range(0, limit + 1, CHAIN_WINDOW_STRIDE):
                 if token[start : start + CHAIN_WINDOW] in argument_text:
-                    return True
+                    return category
         # Identifiers need boundary matching: "29" must not match "1293".
-        return any(
-            re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])", argument_text)
-            for token in self.state.identifier_tokens
-        )
+        for token, category in self.state.identifier_tokens:
+            if re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])", argument_text):
+                return category
+        return None
 
-    def _remember_output_tokens(self, response_text: str) -> None:
+    def _remember_output_tokens(self, response_text: str, category: ToolCategory) -> None:
         """Record distinctive spans of a response for later chained-data checks.
 
         MCP responses are JSON and usually arrive on a single line, so remembering
@@ -432,24 +602,26 @@ class FeatureExtractor:
             candidates = list(self.scorer._iter_strings(payload))
             # Keep the raw text too, so a bare JSON string response still registers.
             candidates.extend(line.strip().strip('",') for line in response_text.splitlines())
-            self._remember_identifiers(payload)
+            self._remember_identifiers(payload, category=category)
 
         for candidate in candidates:
             if len(candidate) >= MIN_CHAIN_TOKEN_LEN:
-                self.state.output_tokens.append(candidate)
+                self.state.output_tokens.append((candidate, category))
 
-    def _remember_identifiers(self, payload: Any, key: str | None = None) -> None:
+    def _remember_identifiers(
+        self, payload: Any, key: str | None = None, *, category: ToolCategory = ToolCategory.READ
+    ) -> None:
         """Record identifier values, which are chainable regardless of length."""
         if isinstance(payload, dict):
             for child_key, child in payload.items():
-                self._remember_identifiers(child, child_key)
+                self._remember_identifiers(child, child_key, category=category)
         elif isinstance(payload, (list, tuple)):
             for child in payload:
-                self._remember_identifiers(child, key)
+                self._remember_identifiers(child, key, category=category)
         elif key and _ID_KEY_RE.search(key) and isinstance(payload, (str, int)):
             text = str(payload)
             if MIN_IDENTIFIER_LEN <= len(text) <= 64:
-                self.state.identifier_tokens.append(text)
+                self.state.identifier_tokens.append((text, category))
 
     def _description_mismatch(self, call: ObservedCall, response_text: str) -> bool:
         """True if the response bears little relation to what the tool claims to do.
