@@ -32,6 +32,7 @@ from chainwatch.engine.features import (
 )
 from chainwatch.engine.taxonomy import (
     SensitivityScorer,
+    destination_tokens,
     ToolCategory,
     ToolClassifier,
     shannon_entropy,
@@ -108,6 +109,82 @@ def test_configure_beats_write_ordering():
     """`write_mcp_config` is CONFIGURE, not WRITE -- rule R5 depends on it."""
     assert ToolClassifier().classify("write_mcp_config") is ToolCategory.CONFIGURE
     assert ToolClassifier().classify("write_file") is ToolCategory.WRITE
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "add_global_rule",
+        "add_user_rule",
+        "add_global_autodelete_rule",
+        "add_user_autodelete_rule",
+        "remove_global_rule",
+        "remove_user_rule_by_id",
+        "remove_multiple_user_rules",
+        "copy_rule_to_global",
+        "enable_disable_rule",
+        "apply_rule_to_all_emails",
+    ],
+)
+def test_filter_rule_management_is_configure(tool):
+    """Mail-filter rule management is configuration, which is what R5 detects.
+
+    Until this passed, every CONFIGURE pattern required a literal ``config`` /
+    ``settings`` / ``mcp`` / ``install_`` / ``register_`` / ``grant_`` token, so
+    rule management fell through to WRITE -- and ``enable_disable_rule``, which
+    matched no verb at all, fell all the way to the READ default despite mutating
+    persistent state. R5 could therefore not fire on filter maintenance, benign or
+    malicious: route C's filter-maintenance recipes exist purely to give R5 benign
+    traffic and produced no CONFIGURE call at all, while the attack corpus went
+    from 5 chains carrying a CONFIGURE call to 47 once this was fixed.
+    """
+    assert ToolClassifier().classify(tool) is ToolCategory.CONFIGURE
+
+
+@pytest.mark.parametrize(
+    "tool",
+    [
+        "list_global_rules",
+        "list_user_rules",
+        "get_rule_statistics",
+        "preview_rule",
+        "find_overlapping_rules",
+        "find_redundant_rules",
+        "simulate_multiple_rules",
+    ],
+)
+def test_inspecting_rules_is_not_configuring_them(tool):
+    """Reading about rules is observation, so it must not reach R5.
+
+    The observational-verb guard sits above the rule patterns for exactly this.
+    A first draft placed the rule patterns higher and swept up ``list_global_rules``
+    and ``simulate_multiple_rules`` -- a dry run reported as a configuration change.
+    """
+    assert ToolClassifier().classify(tool) is ToolCategory.READ
+
+
+@pytest.mark.parametrize(
+    "tool, expected",
+    [
+        # An observational verb beats a channel suffix: looking a contact up in a
+        # local address book is not data leaving the boundary. Measured on a real
+        # capture, where two `search_contacts_by_email` calls scored NETWORK and
+        # carried the session to stage 2 on their own.
+        ("search_contacts_by_email", ToolCategory.READ),
+        ("get_daily_limit_zelle", ToolCategory.READ),
+        ("get_zelle_contacts", ToolCategory.READ),
+        # ...while everything that genuinely leaves stays NETWORK. `*_email` was
+        # only ever needed for names `send_*` already catches one line earlier.
+        ("send_email", ToolCategory.NETWORK),
+        ("send_money_zelle", ToolCategory.NETWORK),
+        ("send_money_venmo", ToolCategory.NETWORK),
+        ("transfer_bank_to_venmo", ToolCategory.NETWORK),
+        ("post_to_webhook", ToolCategory.NETWORK),
+        ("forward_email", ToolCategory.NETWORK),
+    ],
+)
+def test_observational_verb_beats_channel_suffix(tool, expected):
+    assert ToolClassifier().classify(tool) is expected
 
 
 # --------------------------------------------------------- parameter sensitivity
@@ -312,3 +389,59 @@ def test_hash_change_is_available_preflight():
     vector = extractor.extract(ObservedCall(tool="t", arguments={}, server="s"))
     assert vector[OC_HASH_CHANGE] == 1.0
     assert vector[OC_IMPERATIVE] == 0.0, "response-derived flags stay 0 pre-flight"
+
+
+# ---------------------------------------------------------------------------
+# Destination extraction -- the input rule R3 has never had.
+#
+# A "destination" names where value or data is going: a mail recipient, an
+# account, an endpoint. Deliberately narrower than Parameter Sensitivity, which
+# asks how dangerous the arguments look rather than who is on the receiving end.
+# ---------------------------------------------------------------------------
+
+
+def test_destination_tokens_finds_email():
+    assert destination_tokens({"to": "julie.williams@bluesparrowtech.com"}) == {
+        "julie.williams@bluesparrowtech.com"
+    }
+
+
+def test_destination_tokens_finds_iban_and_normalizes():
+    assert destination_tokens({"to_iban": "GB29 NWBK 60161331926819"}) == {
+        "GB29NWBK60161331926819"
+    }
+
+
+def test_destination_tokens_finds_external_url_host_only():
+    """Host, not path -- the same host on a different path is one destination."""
+    assert destination_tokens({"url": "https://attacker.example.com/c"}) == {
+        "attacker.example.com"
+    }
+
+
+def test_destination_tokens_ignores_benign_hosts():
+    assert destination_tokens({"url": "https://github.com/acme/repo"}) == set()
+
+
+def test_destination_tokens_ignores_the_word_iban():
+    """A search *for* the word is not a destination.
+
+    FINANCIAL_VALUE_RE's lexical arm names a field, not a recipient. Note 22
+    records that arm scoring {"query": "IBAN"} identically to a real transfer;
+    destination extraction takes only the structural arms.
+    """
+    assert destination_tokens({"query": "IBAN"}) == set()
+
+
+def test_destination_tokens_ignores_phone_numbers():
+    """No phone pattern.
+
+    Note 9: a bare digit-run regex scored a phone number as financial and pushed
+    a benign message to Exfiltration. Callers fail closed on an empty set, so
+    omitting phones costs nothing.
+    """
+    assert destination_tokens({"to": "+15551234567", "text": "on my way"}) == set()
+
+
+def test_destination_tokens_empty_for_no_arguments():
+    assert destination_tokens({}) == set()
