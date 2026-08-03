@@ -6,4 +6,5 @@ __pycache__/
 traces/
 logs/
 AgentLAB/
+Debug.md
 regular_data/
