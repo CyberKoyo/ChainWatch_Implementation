@@ -22,14 +22,19 @@ import os
 import socket
 import socketserver
 import threading
+from collections import OrderedDict
 from pathlib import Path
 from typing import Any
 
+from ..audit import state_home
 from ..engine.features import ObservedCall
 from ..engine.rules import RuleConfig
 from ..engine.session import SessionAnalyzer
 
-DEFAULT_SOCKET_PATH = Path.home() / ".chainwatch" / "session.sock"
+#: Shares ``state_home()`` with the trace writer on purpose. The capture scripts
+#: relocate both together via CHAINWATCH_HOME and then wait for this socket to
+#: appear; resolving the two independently is how that wait silently never ends.
+DEFAULT_SOCKET_PATH = state_home() / "session.sock"
 
 #: Guards the shared analyzer. Proxies are independent processes but the daemon
 #: serves them on threads, and the analyzer is emphatically not thread-safe.
@@ -66,21 +71,63 @@ def verdict_to_dict(verdict: Any) -> dict[str, Any]:
     return payload
 
 
+#: How many sessions one daemon keeps analyzers for. A capture run is a few dozen
+#: recipes and a desktop is one operator, so this only bounds a daemon left running
+#: for weeks; the oldest is evicted, which at worst restarts that session's window.
+MAX_TRACKED_SESSIONS = 64
+
+#: Used when a client sends no session id. Every proxy sends one, but the field is
+#: optional on the wire so an older client still works -- and pooling those into one
+#: named bucket is honest about what is happening, where inventing a fresh id per
+#: request would silently disable the window entirely.
+DEFAULT_SESSION = "default"
+
+
 class SessionState:
-    """The shared analyzer plus the calls currently awaiting responses."""
+    """One analyzer **per session**, plus the calls currently awaiting responses.
+
+    Pooling is by session, not by daemon. Several proxied servers reporting under one
+    ``CHAINWATCH_SESSION`` share a window on purpose -- that is what makes feature dim
+    9 and rule R2 observable at all. Two *different* sessions must not, and until the
+    id crossed the wire they did: a two-recipe capture run came back as one 26-call
+    session, its call index running straight through the boundary. Sharing a window
+    across recipes lets R2 pair servers from unrelated tasks and lets R3 find its
+    "READ within m steps" in the previous recipe, which corrupts precisely the
+    false-positive figure route C exists to measure.
+    """
 
     def __init__(self, config: RuleConfig | None = None) -> None:
-        self.analyzer = SessionAnalyzer(config=config or RuleConfig())
-        self.pending: dict[str, ObservedCall] = {}
+        self.config = config or RuleConfig()
+        self._analyzers: OrderedDict[str, SessionAnalyzer] = OrderedDict()
+        # Keyed by the client's call key, which is already pid-unique. The session is
+        # carried alongside so complete() reaches the same analyzer submit() used,
+        # even if the client's session id changed in between.
+        self.pending: dict[str, tuple[str, ObservedCall]] = {}
+
+    def analyzer_for(self, session: str) -> SessionAnalyzer:
+        """The analyzer for ``session``, created on first sight."""
+        existing = self._analyzers.get(session)
+        if existing is not None:
+            self._analyzers.move_to_end(session)
+            return existing
+
+        created = SessionAnalyzer(config=self.config)
+        self._analyzers[session] = created
+        while len(self._analyzers) > MAX_TRACKED_SESSIONS:
+            self._analyzers.popitem(last=False)
+        return created
 
     def handle(self, request: dict[str, Any]) -> dict[str, Any]:
         operation = request.get("op")
+        session = str(request.get("session") or DEFAULT_SESSION)
 
         if operation == "ping":
-            return {"ok": True, "calls": len(self.analyzer.history)}
+            return {"ok": True, "calls": len(self.analyzer_for(session).history)}
 
         if operation == "register_tools":
-            changed = self.analyzer.register_tools(request["server"], request["tools"])
+            changed = self.analyzer_for(session).register_tools(
+                request["server"], request["tools"]
+            )
             return {"ok": True, "changed": sorted(changed)}
 
         if operation == "submit":
@@ -91,26 +138,37 @@ class SessionState:
                 timestamp=request["timestamp"],
             )
             commit_blocked = bool(request.get("commit_blocked", False))
-            verdict = self.analyzer.submit(call, commit_blocked=commit_blocked)
+            verdict = self.analyzer_for(session).submit(call, commit_blocked=commit_blocked)
             # An observe-only proxy forwards a blocked call, so its response is still
             # coming and the call has to stay claimable by complete().
             if not verdict.blocked or commit_blocked:
-                self.pending[request["key"]] = call
+                self.pending[request["key"]] = (session, call)
             return {"ok": True, "verdict": verdict_to_dict(verdict)}
 
         if operation == "complete":
-            call = self.pending.pop(request["key"], None)
-            if call is None:
+            claimed = self.pending.pop(request["key"], None)
+            if claimed is None:
                 return {"ok": False, "error": "unknown call key"}
-            verdict = self.analyzer.complete(call, request.get("response", ""))
+            owning_session, call = claimed
+            verdict = self.analyzer_for(owning_session).complete(
+                call, request.get("response", "")
+            )
             return {"ok": True, "verdict": verdict_to_dict(verdict)}
 
         if operation == "stages":
-            return {"ok": True, "stages": self.analyzer.stages}
+            return {"ok": True, "stages": self.analyzer_for(session).stages}
 
         if operation == "reset":
-            self.analyzer = SessionAnalyzer(config=self.analyzer.config)
-            self.pending.clear()
+            # No session named means all of them; the op exists for tests and for an
+            # operator clearing a daemon between runs.
+            if request.get("session"):
+                self._analyzers.pop(session, None)
+                self.pending = {
+                    key: value for key, value in self.pending.items() if value[0] != session
+                }
+            else:
+                self._analyzers.clear()
+                self.pending.clear()
             return {"ok": True}
 
         return {"ok": False, "error": f"unknown op {operation!r}"}

@@ -1,0 +1,40 @@
+{
+  "mcpServers": {
+    "gmail": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "gmail",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "bizreal",
+        "--",
+        "npx", "-y", "@gongrzhe/server-gmail-autoauth-mcp@1.1.11"
+      ]
+    },
+    "gcalendar": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "gcalendar",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "bizreal",
+        "--",
+        "npx", "-y", "@cocal/google-calendar-mcp@2.6.2"
+      ]
+    },
+    "gdrive": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "gdrive",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "bizreal",
+        "--",
+        "npx", "-y", "@modelcontextprotocol/server-gdrive@2025.1.14"
+      ]
+    }
+  }
+}

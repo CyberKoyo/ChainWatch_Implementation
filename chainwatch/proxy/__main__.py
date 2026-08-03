@@ -202,12 +202,20 @@ def main(argv: list[str] | None = None) -> int:
 
     server_name = options.server or command[-1].split("/")[-1]
     config = RuleConfig(window=options.window, step_threshold=options.steps)
-    backend = build_session_backend(config=config, use_daemon=not options.no_daemon)
-
     # One id per *session*, not per process: with the daemon on, several proxied servers
     # share one k=10 window, so their lines must group together or the trace will not
     # match what the rules actually reasoned over. Export CHAINWATCH_SESSION to tie them.
+    #
+    # Resolved *before* the backend, and handed to it, because the daemon keys one
+    # analyzer per session. Built the other way round the daemon got no id at all and
+    # pooled every session of its lifetime into one window -- so a capture run's
+    # recipes were judged against each other's calls while the trace, using this same
+    # id, correctly recorded them apart.
     session = os.environ.get("CHAINWATCH_SESSION") or uuid.uuid4().hex[:12]
+
+    backend = build_session_backend(
+        config=config, use_daemon=not options.no_daemon, session=session
+    )
 
     audit = None
     if not options.no_log:
