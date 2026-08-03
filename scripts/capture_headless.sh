@@ -28,6 +28,12 @@ REPEATS="${2:-1}"
 
 mkdir -p "$STATE/logs" "$STATE/notes"
 
+# One stamp per invocation. `research-YYYYMMDD-NNN` is identical for the Nth
+# recipe of every run made on the same day, so two runs merge into one apparent
+# session and the k=10 window reasons over calls that never sat next to each
+# other. Same defect measured on route C.
+RUN="$(date +%Y%m%d-%H%M%S)"
+
 # The github server reads GITHUB_PERSONAL_ACCESS_TOKEN. Borrow the gh CLI's token
 # at runtime rather than writing one into .mcp.research.json, which is a file that
 # wants to be committable.
@@ -38,11 +44,27 @@ fi
 [ -n "${GITHUB_PERSONAL_ACCESS_TOKEN:-}" ] || \
     echo "warning: no GitHub token; the github recipes will fail and be skipped" >&2
 
-if [ ! -S "$STATE/session.sock" ]; then
+# Probe by connecting, not by `[ -S ]`: a daemon killed without cleanup leaves the
+# socket file behind, so the stat test passes, no daemon is started, and every
+# proxy silently falls back to per-process state with dim 9 and R2 dead.
+daemon_alive() {
+    "$PYTHON" - "$STATE/session.sock" <<'PY'
+import socket, sys
+probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+probe.settimeout(1.0)
+try:
+    probe.connect(sys.argv[1])
+except OSError:
+    sys.exit(1)
+PY
+}
+
+if ! daemon_alive; then
+    rm -f "$STATE/session.sock"          # only ever a corpse; a live one answered above
     "$PYTHON" -m chainwatch daemon &
     DAEMON=$!
     trap 'kill "$DAEMON" 2>/dev/null || true' EXIT
-    for _ in $(seq 20); do [ -S "$STATE/session.sock" ] && break; sleep 0.1; done
+    for _ in $(seq 40); do daemon_alive && break; sleep 0.1; done
 fi
 
 run=0
@@ -54,7 +76,7 @@ for pass in $(seq "$REPEATS"); do
 
         # A fresh id per recipe. Reusing one across recipes would merge unrelated
         # work into a single k=10 window and invent adjacencies that never happened.
-        export CHAINWATCH_SESSION="research-$(date +%Y%m%d)-$(printf '%03d' "$run")"
+        export CHAINWATCH_SESSION="research-$RUN-$(printf '%03d' "$run")"
         echo "[$CHAINWATCH_SESSION] $task" >&2
 
         # Failures are logged and stepped over: one unreachable repo or rate limit

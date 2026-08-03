@@ -57,6 +57,11 @@ class Verdict:
     #: R5 appeared zero times across 6396 captured calls before this was fixed.
     #: Typed loosely to keep this module free of numpy.
     vector: Any = None
+    #: Where this call's destination came from, as a ``features.Provenance``.
+    #: Recorded in the trace so a captured corpus can be re-scored offline without
+    #: replaying it. Typed loosely for the same reason as ``vector`` -- and because
+    #: the daemon sends it across the socket as a bare string.
+    provenance: Any = None
 
     @property
     def severity(self) -> Severity:

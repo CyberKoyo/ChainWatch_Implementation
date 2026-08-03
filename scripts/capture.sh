@@ -26,13 +26,29 @@ mkdir -p "$STATE/logs" "$STATE/notes"
 # otherwise the trace grouping would not match what the rules reasoned over.
 export CHAINWATCH_SESSION="${CHAINWATCH_SESSION:-$(date +%Y%m%d-%H%M%S)}"
 
-if [ ! -S "$STATE/session.sock" ]; then
+# Probe by connecting, not by `[ -S ]`: a daemon killed without cleanup leaves the
+# socket file behind, so the stat test passes, no daemon is started, and every
+# proxy silently falls back to per-process state with dim 9 and R2 dead.
+daemon_alive() {
+    "$PYTHON" - "$STATE/session.sock" <<'PY'
+import socket, sys
+probe = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+probe.settimeout(1.0)
+try:
+    probe.connect(sys.argv[1])
+except OSError:
+    sys.exit(1)
+PY
+}
+
+if ! daemon_alive; then
+    rm -f "$STATE/session.sock"          # only ever a corpse; a live one answered above
     "$PYTHON" -m chainwatch daemon &
     DAEMON=$!
     trap 'kill "$DAEMON" 2>/dev/null || true' EXIT
-    # The socket appears a beat after the process does; a proxy that starts first
-    # falls back to per-process state and silently loses cross-server flags.
-    for _ in $(seq 20); do [ -S "$STATE/session.sock" ] && break; sleep 0.1; done
+    # The socket answers a beat after the process starts; a proxy that starts
+    # first falls back to per-process state and silently loses cross-server flags.
+    for _ in $(seq 40); do daemon_alive && break; sleep 0.1; done
 fi
 
 echo "chainwatch: session $CHAINWATCH_SESSION -> $STATE/logs/$(date -u +%F).jsonl" >&2

