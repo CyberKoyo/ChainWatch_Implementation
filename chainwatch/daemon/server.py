@@ -68,6 +68,11 @@ def verdict_to_dict(verdict: Any) -> dict[str, Any]:
     }
     if verdict.vector is not None:
         payload["vector"] = [float(x) for x in verdict.vector]
+    # Sent as a bare name for the same reason as the vector: the proxy owns the
+    # audit log, so anything the trace needs has to survive the socket. Route C is
+    # daemon-backed, and this is the column it exists to produce.
+    if verdict.provenance is not None:
+        payload["provenance"] = verdict.provenance.name
     return payload
 
 

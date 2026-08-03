@@ -30,13 +30,13 @@ how scenario S1 resolves its near-identical opening pair.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
 import numpy as np
 
 from .alerts import Verdict
-from .features import FeatureExtractor, ObservedCall
+from .features import FeatureExtractor, ObservedCall, Provenance
 from .hmm import KillChainHMM
 from .model import build_prior_model
 from .rules import CallRecord, RuleConfig, evaluate
@@ -78,8 +78,17 @@ class SessionAnalyzer:
         of the verdict; see the module docstring.
         """
         vector = self.extractor.extract(call)
-        window, stages = self._decode_with(vector, call)
-        verdict = Verdict(call_index=self._next_index, stage=stages[-1], vector=vector)
+        # Classified before commit(), which is what records the argument side --
+        # otherwise this call would introduce its own destination and could never
+        # be anything but INTRODUCED.
+        provenance = self.extractor.destination_provenance(call)
+        window, stages = self._decode_with(vector, call, provenance)
+        verdict = Verdict(
+            call_index=self._next_index,
+            stage=stages[-1],
+            vector=vector,
+            provenance=provenance,
+        )
         verdict.alerts = evaluate(window, self.config)
 
         if verdict.blocked and not commit_blocked:
@@ -99,13 +108,7 @@ class SessionAnalyzer:
 
         last = self.history[-1]
         patched = self.extractor.patch_output_characteristics(last.vector, call, response_text)
-        self.history[-1] = CallRecord(
-            index=last.index,
-            tool=last.tool,
-            server=last.server,
-            vector=patched,
-            stage=last.stage,
-        )
+        self.history[-1] = replace(last, vector=patched)
 
         window = self.window
         stages, _ = self.model.viterbi(np.array([r.vector for r in window]))
@@ -119,6 +122,7 @@ class SessionAnalyzer:
             call_index=window[-1].index,
             stage=window[-1].stage,
             vector=window[-1].vector,
+            provenance=window[-1].provenance,
         )
         verdict.alerts = evaluate(window, self.config)
         return verdict
@@ -147,7 +151,10 @@ class SessionAnalyzer:
         return [record.stage for record in self.history]
 
     def _decode_with(
-        self, vector: np.ndarray, call: ObservedCall
+        self,
+        vector: np.ndarray,
+        call: ObservedCall,
+        provenance: Provenance = Provenance.UNKNOWN,
     ) -> tuple[list[CallRecord], list[int]]:
         """Decode the window with ``vector`` appended as the pending call."""
         window = self.window
@@ -155,16 +162,11 @@ class SessionAnalyzer:
         raw_stages, _ = self.model.viterbi(np.array(vectors))
         stages = [int(s) + 1 for s in raw_stages]
 
-        records = [
-            CallRecord(
-                index=record.index,
-                tool=record.tool,
-                server=record.server,
-                vector=record.vector,
-                stage=stage,
-            )
-            for record, stage in zip(window, stages)
-        ]
+        # replace() rather than field-by-field reconstruction. Three sites rebuild
+        # these frozen records, and a field added later must not be silently
+        # dropped by whichever one was missed -- which is exactly how a defaulted
+        # field turns into a bug that no test sees.
+        records = [replace(record, stage=stage) for record, stage in zip(window, stages)]
         records.append(
             CallRecord(
                 index=self._next_index,
@@ -172,6 +174,7 @@ class SessionAnalyzer:
                 server=call.server,
                 vector=vector,
                 stage=stages[-1],
+                provenance=provenance,
             )
         )
         return records, stages
@@ -180,11 +183,4 @@ class SessionAnalyzer:
         """Write re-decoded stage labels back over the window."""
         window_size = min(len(stages), len(self.history))
         for offset, stage in enumerate(stages[-window_size:], start=len(self.history) - window_size):
-            record = self.history[offset]
-            self.history[offset] = CallRecord(
-                index=record.index,
-                tool=record.tool,
-                server=record.server,
-                vector=record.vector,
-                stage=stage,
-            )
+            self.history[offset] = replace(self.history[offset], stage=stage)

