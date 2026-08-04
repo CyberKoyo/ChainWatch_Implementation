@@ -4,7 +4,7 @@ One row per call. Features come in four groups, and which groups are switched on
 what distinguishes the evaluation arms -- so the group boundaries here *are* the
 experiment, not an implementation detail:
 
-``current``  the call's own 17 informative dimensions
+``current``  the call's own 17 informative dimensions, plus destination provenance
 ``window``   what the trailing k calls did
 ``hmm``      the HMM's stage posteriors and Viterbi score
 ``rules``    which of R1-R5 fired
@@ -26,6 +26,27 @@ makes and the first thing to fail against live traffic. No feature here is deriv
 from how long the session is; window counts are capped by ``RuleConfig.window`` and
 expressed as fractions of the window's own occupancy.
 
+One inclusion that needs justifying
+-----------------------------------
+**Destination provenance.** :class:`~chainwatch.engine.features.Provenance` is
+deliberately *not* a dimension of the 20-dim vector -- its own docstring says so, and
+that must stay true: ``FEATURE_DIM`` is the contract every trained HMM and every
+captured trace was written against, and a 21st dimension would let a signal the paper
+never specified move the section V-B stage labels.
+
+None of that applies here. This module builds a *supervised* feature matrix that no
+HMM ever sees and that no trace format depends on. Provenance is the only measured
+signal that separates a real exfiltration from its honest siblings -- call 36 of
+``api_key_calendar_agendas_2`` reads ``INTRODUCED`` while the three legitimate sends at
+17/25/44 read ``ATTESTED`` -- so excluding it from the model too would be excluding it
+for a reason that does not hold on this side of the wall.
+
+Two cautions when reading its importance. It is only extractable on NETWORK calls, so
+it is ``UNKNOWN`` on 92.7% of the corpus; if it ranks high, check the model is not using
+"provenance is extractable at all" as a NETWORK detector, which ``tc_network`` already
+encodes. And ``UNKNOWN`` is ``Provenance``'s fail-closed value *and* ``IntEnum`` 0, so
+per CLAUDE.md note 28 every test of it is ``is not None``, never truthiness.
+
 Labels are per session
 ----------------------
 The corpus labels whole chains, and every call inherits its chain's label. Call 1 of
@@ -44,7 +65,7 @@ from typing import Any, Iterable, Sequence
 
 import numpy as np
 
-from ..engine.features import DF_SLICE, OC_SLICE, PS_INDEX, TC_SLICE
+from ..engine.features import DF_SLICE, OC_SLICE, PS_INDEX, TC_SLICE, Provenance
 from ..engine.hmm import N_STAGES
 from ..engine.model import build_prior_model
 from ..engine.rules import RuleConfig
@@ -93,19 +114,39 @@ class Dataset:
         )
 
 
-def load_sessions(path: str | Path) -> list[list[dict[str, Any]]]:
-    """Group a JSONL trace file into per-session call lists, order preserved."""
+#: What a trace path may be: one file, or several to read as one corpus.
+TracePaths = str | Path | Iterable[str | Path]
+
+
+def _as_paths(paths: TracePaths) -> list[Path]:
+    """One path or many, normalized. A bare string is a path, not an iterable of chars."""
+    if isinstance(paths, (str, Path)):
+        return [Path(paths)]
+    return [Path(p) for p in paths]
+
+
+def load_sessions(paths: TracePaths) -> list[list[dict[str, Any]]]:
+    """Group JSONL trace files into per-session call lists, order preserved.
+
+    Several files are read as *one* corpus rather than concatenated session lists,
+    because a single capture session legitimately spans files: the audit log rolls
+    daily, and the replay corpus lives beside ``~/.chainwatch/logs/`` where the live
+    routes write. Grouping on ``session`` across all of them and then sorting on
+    ``call`` is what reunites those pieces -- and is why ``call`` had to become
+    globally unique within a session (CLAUDE.md note 13).
+    """
     sessions: dict[str, list[dict[str, Any]]] = {}
-    for line in Path(path).read_text(encoding="utf-8").splitlines():
-        if not line.strip():
-            continue
-        try:
-            entry = json.loads(line)
-        except ValueError:
-            continue
-        if not isinstance(entry.get("v"), list):
-            continue
-        sessions.setdefault(str(entry.get("session", "unknown")), []).append(entry)
+    for path in _as_paths(paths):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                continue
+            if not isinstance(entry.get("v"), list):
+                continue
+            sessions.setdefault(str(entry.get("session", "unknown")), []).append(entry)
 
     for calls in sessions.values():
         calls.sort(key=lambda e: e.get("call", 0))
@@ -126,13 +167,38 @@ def _current_names() -> list[str]:
                 "imperative", "xml", "mismatch", "volume", "hash_change", "encoded", "external_url",
             )
         ]
+        + [f"prov_{p.name.lower()}" for p in Provenance]
     )
 
 
-def _current(vector: np.ndarray) -> np.ndarray:
-    """The call's own dimensions, minus the three temporal ones."""
+def _provenance(entry: dict[str, Any]) -> np.ndarray:
+    """One-hot over :class:`Provenance`, falling back to ``UNKNOWN``.
+
+    ``prov`` is absent from every trace written before Phase 13, and ``UNKNOWN`` is
+    already the fail-closed answer for a call whose destination could not be read --
+    so an old trace and an unreadable destination land in the same column, which is
+    the honest place for both.
+    """
+    raw = entry.get("prov")
+    try:
+        value = Provenance[raw] if isinstance(raw, str) else Provenance.UNKNOWN
+    except KeyError:
+        value = Provenance.UNKNOWN
+    one_hot = np.zeros(len(Provenance))
+    one_hot[list(Provenance).index(value)] = 1.0
+    return one_hot
+
+
+def _current(vector: np.ndarray, entry: dict[str, Any]) -> np.ndarray:
+    """The call's own dimensions, minus the three temporal ones, plus provenance."""
     return np.concatenate(
-        [vector[TC_SLICE], [vector[PS_INDEX]], vector[DF_SLICE], vector[OC_SLICE]]
+        [
+            vector[TC_SLICE],
+            [vector[PS_INDEX]],
+            vector[DF_SLICE],
+            vector[OC_SLICE],
+            _provenance(entry),
+        ]
     )
 
 
@@ -214,12 +280,12 @@ def _rules(entry: dict[str, Any]) -> np.ndarray:
 
 
 def build(
-    path: str | Path,
+    path: TracePaths,
     groups: Iterable[str] = GROUPS,
     config: RuleConfig | None = None,
     sources: Iterable[str] | None = None,
 ) -> Dataset:
-    """Assemble a :class:`Dataset` from a trace file.
+    """Assemble a :class:`Dataset` from one trace file or several read as one corpus.
 
     ``sources`` filters populations. The SHADE trajectories are excluded from
     training everywhere -- they are the only real agent behaviour in the corpus and
@@ -261,7 +327,7 @@ def build(
         for index, entry in enumerate(calls):
             parts: list[np.ndarray] = []
             if "current" in groups:
-                parts.append(_current(vectors[index]))
+                parts.append(_current(vectors[index], entry))
             if "window" in groups:
                 parts.append(_window(vectors, index, config.window))
             if "hmm" in groups:
@@ -277,7 +343,14 @@ def build(
             weights.append(0.25 + 0.75 * ((index + 1) / len(calls)))
             session_ids.append(str(entry.get("session")))
             source_ids.append(str(entry.get("source")))
-            environments.append(str(entry.get("environment")))
+            # Replayed lines carry `environment`; live capture carries `server`
+            # instead, and a bizops line has only the latter. Falling back keeps
+            # leave-one-environment-out able to hold out a real population rather
+            # than lumping every captured session into a single "None" stratum.
+            environment = entry.get("environment")
+            if environment is None:
+                environment = entry.get("server")
+            environments.append(str(environment) if environment is not None else "unknown")
 
     names: list[str] = []
     for group in GROUPS:

@@ -19,6 +19,8 @@ from chainwatch.ml import dataset as ds
 xgboost = pytest.importorskip("xgboost", reason="requires the [ml] extra")
 
 from chainwatch.ml.evaluate import (  # noqa: E402 -- must follow importorskip
+    HELD_SOURCES,
+    TRAIN_SOURCES,
     _auc,
     _folds,
     rule_baseline,
@@ -83,9 +85,22 @@ def traces(tmp_path):
 
 
 def test_temporal_dims_never_reach_the_model(traces):
-    """TF dims 10-12 are replay artifacts: call_rate hit 1816/sec under batch replay."""
+    """TF dims 10-12 are replay artifacts: call_rate hit 1816/sec under batch replay.
+
+    Pinned by *name* rather than by column count. A count alone passes just as well
+    when a temporal dimension is added and an unrelated one dropped -- the same
+    weakness that let ``win_occupancy`` sit in arm D unnoticed, and the reason the
+    regression test below asserts correlation rather than range.
+    """
     built = ds.build(traces, groups=("current",))
-    assert len(built.names) == 17
+    assert built.names == [
+        "tc_read", "tc_write", "tc_execute", "tc_network", "tc_configure",
+        "ps",
+        "df_internal_read", "df_external_write", "df_chained", "df_cross_server",
+        "oc_imperative", "oc_xml", "oc_mismatch", "oc_volume", "oc_hash_change",
+        "oc_encoded", "oc_external_url",
+        "prov_unknown", "prov_attested", "prov_introduced", "prov_unattested",
+    ]
     assert not any("tf_" in name or "interval" in name or "rate" in name for name in built.names)
 
 
@@ -136,6 +151,62 @@ def test_later_calls_carry_more_weight(traces):
     assert built.weights.max() > built.weights.min()
 
 
+# ------------------------------------------------------------------- provenance
+
+
+def test_provenance_defaults_to_unknown_on_traces_that_predate_it(traces):
+    """Every trace written before Phase 13 lacks ``prov``; none may become ATTESTED.
+
+    ``UNKNOWN`` is ``Provenance``'s fail-closed value, so an absent field and an
+    unreadable destination land in the same column -- the honest place for both.
+    """
+    built = ds.build(traces, groups=("current",))
+    assert (built.rows[:, built.names.index("prov_unknown")] == 1.0).all()
+    for name in ("prov_attested", "prov_introduced", "prov_unattested"):
+        assert built.rows[:, built.names.index(name)].max() == 0.0
+
+
+def test_provenance_reads_the_recorded_destination(tmp_path):
+    """A one-hot that is UNKNOWN on every row is a dead feature, not a working one."""
+    path = tmp_path / "p.jsonl"
+    with path.open("w", encoding="utf-8") as handle:
+        for index, prov in enumerate(("ATTESTED", "INTRODUCED", "UNATTESTED"), start=1):
+            handle.write(
+                json.dumps(
+                    {
+                        "session": "s", "label": "benign", "source": "realism",
+                        "environment": "workspace", "call": index, "server": "workspace",
+                        "stage": 6, "rules": [], "prov": prov, "v": vector(),
+                    }
+                )
+                + "\n"
+            )
+
+    built = ds.build(path, groups=("current",))
+    for offset, name in enumerate(("prov_attested", "prov_introduced", "prov_unattested")):
+        assert built.rows[offset, built.names.index(name)] == 1.0
+    assert built.rows[:, built.names.index("prov_unknown")].max() == 0.0
+
+
+def test_an_unrecognised_provenance_string_fails_closed(tmp_path):
+    """A trace from a future version must not silently one-hot as something trusted."""
+    path = tmp_path / "u.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "session": "s", "label": "benign", "source": "realism",
+                "environment": "workspace", "call": 1, "server": "workspace",
+                "stage": 1, "rules": [], "prov": "SOMETHING_NEW", "v": vector(),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    built = ds.build(path, groups=("current",))
+    assert built.rows[0, built.names.index("prov_unknown")] == 1.0
+
+
 # ------------------------------------------------------------------- populations
 
 
@@ -165,6 +236,75 @@ def test_false_positive_source_is_realism_only(tmp_path):
     assert baseline.false_positives == 1.0
     assert baseline.control_rate == 1.0
     assert baseline.n_benign == 1  # control is not in the benign denominator
+
+
+def test_several_trace_files_load_as_one_corpus(tmp_path):
+    """bizops lives in ~/.chainwatch/logs/ while the replay corpus lives in traces/."""
+    first = write_traces(tmp_path / "one.jsonl", {"a": [{"v": vector(), "source": "agentlab"}]})
+    second = write_traces(tmp_path / "two.jsonl", {"b": [{"v": vector(), "source": "bizops"}]})
+
+    sessions = ds.load_sessions([first, second])
+    assert len(sessions) == 2
+    assert {str(calls[0]["source"]) for calls in sessions} == {"agentlab", "bizops"}
+
+
+def test_one_session_split_across_files_is_reunited(tmp_path):
+    """The audit log rolls daily, so a long capture session spans files by design.
+
+    Grouping on ``session`` across every file and then sorting on ``call`` is what
+    puts it back together -- and is why ``call`` had to become unique session-wide.
+    """
+    first = tmp_path / "day1.jsonl"
+    second = tmp_path / "day2.jsonl"
+    for path, calls in ((first, (1, 2)), (second, (3, 4))):
+        with path.open("w", encoding="utf-8") as handle:
+            for index in calls:
+                handle.write(
+                    json.dumps(
+                        {
+                            "session": "long", "label": "benign", "source": "bizops",
+                            "call": index, "server": "banking", "stage": 1,
+                            "rules": [], "v": vector(),
+                        }
+                    )
+                    + "\n"
+                )
+
+    sessions = ds.load_sessions([second, first])  # deliberately out of order
+    assert len(sessions) == 1
+    assert [entry["call"] for entry in sessions[0]] == [1, 2, 3, 4]
+
+
+def test_environment_falls_back_to_the_server_name(tmp_path):
+    """Live capture records ``server``; only replayed lines carry ``environment``.
+
+    Without the fallback every captured session collapses into a single "None"
+    stratum, so leave-one-environment-out holds out nothing.
+    """
+    path = tmp_path / "biz.jsonl"
+    path.write_text(
+        json.dumps(
+            {
+                "session": "s", "label": "benign", "source": "bizops",
+                "call": 1, "server": "banking", "stage": 1, "rules": [], "v": vector(),
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    built = ds.build(path, groups=("current",), sources=("bizops",))
+    assert built.environments.tolist() == ["banking"]
+
+
+def test_held_out_sources_are_never_trained_on(tmp_path):
+    """The held-out populations are the only real agent behaviour in the corpus.
+
+    Scoring a chain with a model that was fitted on it says nothing, and the two
+    lists are edited independently -- so the disjointness is pinned here rather than
+    left as a property nothing observes.
+    """
+    assert not set(HELD_SOURCES) & set(TRAIN_SOURCES)
 
 
 def test_rule_baseline_ignores_shade(tmp_path):

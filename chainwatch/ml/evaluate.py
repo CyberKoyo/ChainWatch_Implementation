@@ -57,11 +57,16 @@ from typing import Iterable
 import numpy as np
 
 from ..engine.taxonomy import ToolCategory, ToolClassifier
-from .dataset import ARMS, Dataset, build, load_sessions
+from .dataset import ARMS, Dataset, TracePaths, build, load_sessions
 from .scorer import Scorer, session_labels, session_scores
 
 #: Populations the model may learn from. SHADE is deliberately absent.
 TRAIN_SOURCES = ("agentlab", "realism", "control")
+
+#: Real trajectories, held out of training everywhere. ``shade`` are the extracted
+#: SHADE task-pair solutions; ``bizops`` is route C's live capture against the same
+#: four environments. Neither may appear in TRAIN_SOURCES.
+HELD_SOURCES = ("shade", "bizops")
 
 #: Where false-positive claims come from.
 FP_SOURCE = "realism"
@@ -105,7 +110,7 @@ def threshold_for_detection(attack: np.ndarray, target: float) -> float:
 # ------------------------------------------------------------------------ arm A
 
 
-def rule_baseline(path: str | Path) -> Operating:
+def rule_baseline(path: TracePaths) -> Operating:
     """The rule engine's own numbers, read straight out of the traces.
 
     Recomputed here rather than quoted from CLAUDE.md so the comparison is against
@@ -250,11 +255,21 @@ def permutation_floor(dataset: Dataset, trials: int = 20, k: int = 5, seed: int 
 
 
 def shade_case_study(
-    path: str | Path, groups: Iterable[str], seed: int = 0
+    path: TracePaths,
+    groups: Iterable[str],
+    seed: int = 0,
+    sources: Iterable[str] = HELD_SOURCES,
 ) -> list[tuple[str, float]]:
-    """Score the held-out SHADE trajectories with a model that never saw them."""
+    """Score the held-out *real* trajectories with a model that never saw them.
+
+    Both held-out populations are real agent behaviour and neither is in
+    ``TRAIN_SOURCES``, so widening this beyond ``shade`` cannot leak. It is worth
+    widening because five chains cannot carry a percentage but each is individually
+    inspectable -- and ``bizops`` is the only population carrying payments, mail and
+    filter configuration, which is what R2 and R5 are answerable to.
+    """
     training = build(path, groups=groups, sources=TRAIN_SOURCES)
-    held = build(path, groups=groups, sources=("shade",))
+    held = build(path, groups=groups, sources=tuple(sources))
     if not len(held) or not len(training):
         return []
 
@@ -295,7 +310,12 @@ def _row(point: Operating) -> str:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="chainwatch ml-eval")
-    parser.add_argument("--traces", default="traces/agentlab.jsonl")
+    parser.add_argument(
+        "--traces",
+        nargs="+",
+        default=["traces/agentlab.jsonl"],
+        help="one or more JSONL trace files, read as a single corpus",
+    )
     parser.add_argument("--folds", type=int, default=5)
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--permutations", type=int, default=20)
@@ -303,9 +323,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--arms", default="B,C,D,E")
     options = parser.parse_args(argv)
 
-    path = Path(options.traces)
-    if not path.is_file():
-        sys.stderr.write(f"ml-eval: no trace file at {path}\n")
+    path = [Path(p) for p in options.traces]
+    missing = [p for p in path if not p.is_file()]
+    if missing:
+        # Name every one, not just the first: a caller passing four paths wants to
+        # learn which are wrong in a single run, not to rediscover it four times.
+        sys.stderr.write(
+            "ml-eval: no trace file at " + ", ".join(str(p) for p in missing) + "\n"
+        )
         return 2
 
     print("=" * 78)
@@ -348,8 +373,8 @@ def main(argv: list[str] | None = None) -> int:
               f"(real: {real.auc if real else float('nan'):.3f})")
         print("  A real AUC near this value is indistinguishable from luck at n=605.")
 
-    print("\n-- SHADE held-out trajectories " + "-" * 47)
-    print("  Never trained on. The two matched pairs differ only by their attack steps.")
+    print("\n-- held-out real trajectories " + "-" * 48)
+    print("  Never trained on. The two matched SHADE pairs differ only by their attack steps.")
     for arm in ("D",) if "D" in results else tuple(results)[:1]:
         for session, score in shade_case_study(path, ARMS[arm], seed=options.seed):
             print(f"  [{arm}] {session:50s} {score:.3f}")
