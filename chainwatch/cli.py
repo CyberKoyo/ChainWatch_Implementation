@@ -160,7 +160,12 @@ def _load_sequences(path: Path) -> list[np.ndarray]:
 def command_ml_train(argv: list[str]) -> int:
     """Fit the supervised scorer over captured traces."""
     parser = argparse.ArgumentParser(prog="chainwatch ml-train")
-    parser.add_argument("--traces", default="traces/agentlab.jsonl")
+    parser.add_argument(
+        "--traces",
+        nargs="+",
+        default=["traces/agentlab.jsonl"],
+        help="one or more JSONL trace files, read as a single corpus",
+    )
     parser.add_argument("--out", default="chainwatch/models/scorer")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--arm", default="D", help="which feature groups to use (B, C, D or E)")
