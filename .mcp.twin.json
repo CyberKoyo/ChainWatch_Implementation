@@ -1,0 +1,60 @@
+{
+  "mcpServers": {
+    "workspace": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "workspace",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "twin",
+        "--log-args",
+        "--",
+        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        "-m", "agentlab_bridge.env_mcp_server", "--env", "workspace"
+      ]
+    },
+    "banking": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "banking",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "twin",
+        "--log-args",
+        "--",
+        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        "-m", "agentlab_bridge.env_mcp_server", "--env", "banking"
+      ]
+    },
+    "travel": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "travel",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "twin",
+        "--log-args",
+        "--",
+        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        "-m", "agentlab_bridge.env_mcp_server", "--env", "travel"
+      ]
+    },
+    "spam_filter": {
+      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "args": [
+        "-m", "chainwatch",
+        "--server", "spam_filter",
+        "--observe-only",
+        "--label", "benign",
+        "--source", "twin",
+        "--log-args",
+        "--",
+        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        "-m", "agentlab_bridge.env_mcp_server", "--env", "spam_filter"
+      ]
+    }
+  }
+}
