@@ -20,10 +20,12 @@ xgboost = pytest.importorskip("xgboost", reason="requires the [ml] extra")
 
 from chainwatch.ml.evaluate import (  # noqa: E402 -- must follow importorskip
     HELD_SOURCES,
+    POPULATIONS,
     TRAIN_SOURCES,
     _auc,
     _folds,
     rule_baseline,
+    shade_case_study,
     threshold_for_detection,
 )
 from chainwatch.ml.scorer import Scorer, session_scores  # noqa: E402
@@ -307,6 +309,33 @@ def test_held_out_sources_are_never_trained_on(tmp_path):
     assert not set(HELD_SOURCES) & set(TRAIN_SOURCES)
 
 
+def test_every_population_holds_out_what_it_does_not_train_on(tmp_path):
+    """Same invariant as above, for each named protocol rather than the globals.
+
+    ``REAL`` trains on ``bizops``/``bizattack`` -- populations ``SYNTHETIC`` holds
+    out -- so the disjointness cannot be asserted once over two module constants and
+    has to hold per protocol. Getting this wrong is silent: the model would be
+    scored on chains it was fitted on and the report would look better for it.
+    """
+    for name, populations in POPULATIONS.items():
+        assert not set(populations.train) & set(populations.held), name
+        assert populations.false_positive in populations.train, name
+        if populations.control is not None:
+            assert populations.control in populations.train, name
+
+
+def test_case_study_refuses_to_score_a_population_it_trained_on(tmp_path):
+    """The held-out study's only value is that the model never met these chains."""
+    path = write_traces(
+        tmp_path / "overlap.jsonl",
+        {"a": [{"v": vector(), "label": "attack", "source": "bizattack"}]},
+    )
+    with pytest.raises(ValueError):
+        shade_case_study(
+            path, ("current",), train_sources=("bizops", "bizattack"), sources=("bizattack",)
+        )
+
+
 def test_rule_baseline_ignores_shade(tmp_path):
     path = write_traces(
         tmp_path / "b.jsonl",
@@ -316,6 +345,36 @@ def test_rule_baseline_ignores_shade(tmp_path):
         },
     )
     assert rule_baseline(path).n_attack == 1
+
+
+def test_rule_baseline_counts_only_what_the_population_trains_on(tmp_path):
+    """A population's baseline may not borrow the other population's attack class.
+
+    Selecting as "everything except ``held``" let any source named in neither set
+    through. Under ``REAL`` that is ``agentlab``, so a run over route C's corpus
+    reported a baseline of 200 synthesized attack chains against 9 real benign
+    sessions -- a cross-population number, printed as the headline every arm is then
+    pinned to, in the one mode whose whole purpose is keeping the two apart.
+
+    It also disabled ``main``'s both-classes guard: ``n_attack`` was 200, so a
+    population with no attack session at all printed nan tables and exited 0, which
+    is CLAUDE.md note 20's defect wearing arm A's hat.
+    """
+    path = write_traces(
+        tmp_path / "mixed.jsonl",
+        {
+            "syn": [{"v": vector(), "label": "attack", "source": "agentlab", "rules": ["R3"]}],
+            "biz": [{"v": vector(), "label": "benign", "source": "bizops"}],
+            "atk": [{"v": vector(), "label": "attack", "source": "bizattack", "rules": ["R3"]}],
+        },
+    )
+    real = rule_baseline(path, POPULATIONS["real"])
+    assert (real.n_attack, real.n_benign) == (1, 1)
+
+    # ...and the synthetic side keeps the numbers CLAUDE.md's tables were measured
+    # with, which is what makes this a fix rather than a re-baselining.
+    synthetic = rule_baseline(path, POPULATIONS["synthetic"])
+    assert (synthetic.n_attack, synthetic.n_benign) == (1, 0)
 
 
 # ---------------------------------------------------------------------- protocol

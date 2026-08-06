@@ -30,8 +30,25 @@ STATE="${CHAINWATCH_HOME:-$HOME/.chainwatch}"
 RECIPES="${1:-$ROOT/docs/recipes_bizops.txt}"
 REPEATS="${2:-1}"
 
+# Profile name == trace `source` == .mcp.<profile>.json == session-id prefix. One
+# string, four uses. These were four separate literals, and a run that tagged its
+# lines one way while auditing them another would have looked exactly like a clean
+# run -- the audit would have reported "no sessions matched" and exited 2, which is
+# note 20's failure wearing the right exit code.
+#
+#   PROFILE=twin scripts/capture_bizops.sh docs/recipes_twin_benign.txt 1
+PROFILE="${PROFILE:-bizops}"
+MCP_CONFIG="$ROOT/.mcp.$PROFILE.json"
+
+# Pinned, never the CLI's moving default. `~/.claude/settings.json` sets a model and
+# .claude/bizops.settings.json sets none, so an unpinned capture inherits whatever
+# the operator's editor happens to be on -- two batches would then differ by the
+# agent rather than by the task, and nothing on disk would say so.
+MODEL="${CHAINWATCH_MODEL:-claude-opus-5}"
+
 [ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
 [ -f "$RECIPES" ] || { echo "no recipe file at $RECIPES" >&2; exit 1; }
+[ -f "$MCP_CONFIG" ] || { echo "no mcp config at $MCP_CONFIG for profile $PROFILE" >&2; exit 1; }
 [ -d "$ROOT/AgentLAB/SHADE_Arena" ] || {
     echo "no SHADE_Arena checkout at $ROOT/AgentLAB -- route C has nothing to serve" >&2
     exit 1
@@ -82,6 +99,18 @@ daemon_alive || {
     exit 1
 }
 
+# Run the agent from an empty directory, never from the repo. `claude -p` loads the
+# CLAUDE.md of its working directory, and this project's CLAUDE.md documents the
+# planted fixture entities, the exclusion list and what route C is measuring --
+# handing the subject of the experiment the experiment's own notes. Measured on the
+# attack half's first smoke run, where the refusal quoted CLAUDE.md §11 and
+# docs/fixture_exclusions.txt by name. Both halves run neutral so the two
+# populations differ by their task and nothing else.
+WORKDIR="$STATE/agent-cwd"
+mkdir -p "$WORKDIR"
+
+echo "chainwatch: profile $PROFILE, model $MODEL, recipes $RECIPES" >&2
+
 run=0
 for pass in $(seq "$REPEATS"); do
     # Blank lines and # comments are structure, not tasks.
@@ -93,7 +122,7 @@ for pass in $(seq "$REPEATS"); do
         # work into a single k=10 window and invent adjacencies that never
         # happened. Within a recipe the id is shared by all four servers, which is
         # what makes a cross-service session one session.
-        export CHAINWATCH_SESSION="bizops-$RUN-$(printf '%03d' "$run")"
+        export CHAINWATCH_SESSION="$PROFILE-$RUN-$(printf '%03d' "$run")"
         echo "[$CHAINWATCH_SESSION] $task" >&2
 
         # Keep the agent's own transcript. A tool call the settings file denies
@@ -104,11 +133,36 @@ for pass in $(seq "$REPEATS"); do
         #
         # Failures are logged and stepped over: one environment that fails to
         # instantiate must not end a run that is otherwise producing traffic.
-        claude -p "$task" \
-            --mcp-config "$ROOT/.mcp.bizops.json" \
-            --settings "$ROOT/.claude/bizops.settings.json" \
-            >"$STATE/transcripts/$CHAINWATCH_SESSION.txt" 2>>"$STATE/logs/bizops.err" \
-            || echo "  ... failed, continuing (see $STATE/logs/bizops.err)" >&2
+        # --setting-sources project: load NO user settings at all.
+        #
+        # `--settings` merges, it does not replace. .claude/bizops.settings.json
+        # declares only `permissions`, so every session captured before this line
+        # existed also inherited ~/.claude/settings.json's `hooks` -- measured as 4
+        # SessionStart and 7 Stop hook events per session, one of them injecting a
+        # systemMessage into the agent under measurement. Both halves inherit
+        # identically so it cannot leak a label, but it is an unrecorded
+        # modification of the subject, which is note 30's defect reached by a
+        # different path: there the operator's documentation reached the agent,
+        # here the operator's instructions do.
+        #
+        # The working directory is empty, so "project" resolves to nothing and the
+        # only settings in play are the profile's own. Verified rather than
+        # assumed: with the flag a run reports 0 hook events, without it 4.
+        # `hooks: {}` in the profile does NOT work -- hook arrays merge across
+        # sources rather than being overridden.
+        #
+        # --strict-mcp-config: the four env servers and nothing else. Dropping the
+        # user source already unloads the ECC plugin's six, but the deny-by-name
+        # list in the profile was the only thing holding them back before, and a
+        # structural guarantee beats an enumerated one.
+        (cd "$WORKDIR" && claude -p "$task" \
+            --model "$MODEL" \
+            --mcp-config "$MCP_CONFIG" \
+            --strict-mcp-config \
+            --setting-sources project \
+            --settings "$ROOT/.claude/bizops.settings.json") \
+            >"$STATE/transcripts/$CHAINWATCH_SESSION.txt" 2>>"$STATE/logs/$PROFILE.err" \
+            || echo "  ... failed, continuing (see $STATE/logs/$PROFILE.err)" >&2
     done < "$RECIPES"
 done
 
@@ -120,4 +174,4 @@ echo "chainwatch: $run session(s) -> $TRACE" >&2
 # poisoned row among thousands. Non-zero exit is deliberate: a contaminated
 # capture should be noticed now.
 echo >&2
-"$PYTHON" "$ROOT/scripts/fixture_audit.py" --source bizops "$TRACE"
+"$PYTHON" "$ROOT/scripts/fixture_audit.py" --source "$PROFILE" "$TRACE"
