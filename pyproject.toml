@@ -23,6 +23,12 @@ test = ["pytest>=8.0"]
 # is numpy-only and stays that way, so the proxy runs without any of this.
 # scikit-learn is xgboost's own requirement for its sklearn-style estimator API.
 ml = ["xgboost>=2.0", "scikit-learn>=1.4"]
+# Route E (Phase 17). AgentDojo is vendored at ./agentdojo and installed editable:
+#     .venv/bin/pip install -e ./agentdojo
+# It is imported only from agentdojo_bridge/, never from chainwatch/engine/, which
+# stays numpy-only. Route F (InjecAgent) needs nothing here -- it reads that clone's
+# data/*.json and never imports its src/.
+agentdojo = ["agentdojo"]
 
 [project.scripts]
 # Installing the package puts a `chainwatch` binary next to the venv's python,
