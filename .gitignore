@@ -8,3 +8,6 @@ logs/
 AgentLAB/
 CLAUDE.md
 regular_data/
+agentdojo/
+InjecAgent/
+Agent-SafetyBench/
