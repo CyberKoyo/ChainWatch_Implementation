@@ -181,6 +181,13 @@ def main(argv: list[str] | None = None) -> int:
         default="live",
         help="population tag, so captured lines stay separable from other corpora",
     )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="model id driving this capture, stamped on every trace line. Asserted, "
+        "never inferred: a batch whose agent is unrecorded is not reproducible and "
+        "cannot be compared with another batch (note 32)",
+    )
     parser.add_argument("--log-dir", default=None, help=f"trace directory (default {DEFAULT_LOG_DIR})")
     parser.add_argument(
         "--log-args",
@@ -222,6 +229,7 @@ def main(argv: list[str] | None = None) -> int:
         audit = AuditLog(
             directory=options.log_dir or DEFAULT_LOG_DIR,
             include_arguments=options.log_args,
+            model=options.model,
         )
         # Say so out loud. Silent capture is indistinguishable from a misconfiguration,
         # and the whole point is noticing later that the corpus is empty.

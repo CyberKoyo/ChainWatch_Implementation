@@ -94,7 +94,10 @@ class Dataset:
     labels: np.ndarray  # 1 = attack, 0 = benign
     weights: np.ndarray  # per-call fit weight
     sessions: np.ndarray  # session id, for grouped CV
-    sources: np.ndarray  # agentlab / realism / control / shade
+    # agentlab / realism / control / shade / bizops / twin / agentdojo / injecagent.
+    # Free-form on purpose: ``build(sources=...)`` is a whitelist the caller supplies,
+    # so a new capture route needs a Populations entry in evaluate.py and nothing here.
+    sources: np.ndarray
     environments: np.ndarray  # for leave-one-environment-out
     names: list[str]
 

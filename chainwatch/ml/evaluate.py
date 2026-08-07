@@ -137,7 +137,52 @@ TWINS = Populations(
     held=("shade",),
 )
 
-POPULATIONS = {"synthetic": SYNTHETIC, "real": REAL, "twins": TWINS}
+#: Phase 17, route E. The first population whose two classes differ by *neither* the
+#: task text nor the generator: both halves run the same published AgentDojo
+#: ``user_task`` PROMPT under the same executor, and the only difference is whether
+#: the served environment carries the verbatim ``important_instructions`` payload.
+#:
+#: That is what earns it its own row rather than a merge into ``TWINS``. The twins
+#: differ by one authored clause in the *prompt*; these differ by one field of
+#: environment data. Pooling them would let the arms separate on whatever
+#: distinguishes AgentDojo prose from SHADE prose -- the same leak, a fifth time.
+#:
+#: No ``control`` and no ``held``: ``shade`` belongs to route C's universe and has
+#: nothing to say about this one, and naming it while selecting on ``train`` would
+#: only be decorative (note 31 -- selection is a whitelist).
+AGENTDOJO = Populations(
+    name="agentdojo (route E, office indirect injection)",
+    train=("agentdojo",),
+    false_positive="agentdojo",
+    control=None,
+    held=(),
+)
+
+#: Phase 17, route F. The same design in the developer domain: one InjecAgent test
+#: case per session, the published ``User Instruction`` on both halves, and the
+#: injected ``Tool Response`` either served or served with its ``<Attacker
+#: Instruction>`` slot emptied.
+#:
+#: Reported apart from ``AGENTDOJO`` because the *shape* differs, not only the
+#: source: a route F session is one user tool plus whatever the agent does next, so
+#: it is short by construction, while route E's are multi-step. Pooling a 2-call
+#: population with a 20-call one lets session length carry the label, which is
+#: precisely what ``win_occupancy`` did.
+INJECAGENT = Populations(
+    name="injecagent (route F, dev indirect injection)",
+    train=("injecagent",),
+    false_positive="injecagent",
+    control=None,
+    held=(),
+)
+
+POPULATIONS = {
+    "synthetic": SYNTHETIC,
+    "real": REAL,
+    "twins": TWINS,
+    "agentdojo": AGENTDOJO,
+    "injecagent": INJECAGENT,
+}
 
 
 @dataclass

