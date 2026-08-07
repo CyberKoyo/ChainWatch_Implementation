@@ -433,3 +433,33 @@ def test_engine_has_no_scorer_by_default():
     """The numpy-only install path must behave exactly as before."""
     analyzer = SessionAnalyzer()
     assert getattr(analyzer, "scorer", None) is None
+
+
+def test_injection_populations_select_only_their_own_source():
+    """Route E and F are whitelists, and never each other's or anyone else's.
+
+    Note 31: a population that selects by exclusion inherits every source nobody
+    named -- ``real`` counted 200 synthesized attack chains that way and printed a
+    measurement over a corpus holding no real attack session at all.
+    """
+    for name in ("agentdojo", "injecagent"):
+        populations = POPULATIONS[name]
+        assert set(populations.train) == {name}
+        assert populations.false_positive == name
+        for foreign in ("agentlab", "realism", "control", "shade", "bizops", "twin"):
+            assert foreign not in populations.train
+
+
+def test_injection_populations_do_not_pool_with_each_other():
+    """Route F sessions are short by construction; route E's are multi-step.
+
+    Pooled, session length would carry the label -- which is what win_occupancy did.
+    """
+    assert set(POPULATIONS["agentdojo"].train).isdisjoint(POPULATIONS["injecagent"].train)
+
+
+def test_adding_injection_populations_left_the_existing_ones_alone():
+    """Every measured figure in CLAUDE.md §12 belongs to these three."""
+    assert POPULATIONS["synthetic"].train == TRAIN_SOURCES
+    assert POPULATIONS["real"].train == ("bizops", "bizattack")
+    assert POPULATIONS["twins"].train == ("twin", "twinattack")

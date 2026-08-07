@@ -16,3 +16,25 @@ docstring_parser>=0.16
 rich>=13.0
 openai>=1.0
 pandas>=2.0
+
+# The supervised layer in chainwatch/ml/ (the five-arm comparison). Optional by
+# design: chainwatch/engine/ is numpy-only and stays that way, so the proxy runs
+# without any of this. Absent, tests/test_ml.py collects 0 tests rather than
+# failing -- which is why the suite reads 219 in a bare venv and 244 with them.
+#   scikit-learn -- xgboost's own requirement for its sklearn-style estimator API
+xgboost>=2.0
+scikit-learn>=1.4
+
+# Route E (Phase 17, agentdojo_bridge/). Installed from the vendored clone, never
+# from PyPI, so the version is whatever ./agentdojo is checked out at:
+#
+#     .venv/bin/pip install -e ./agentdojo
+#
+# Deliberately not a plain `agentdojo` line here: that would pull an unrelated PyPI
+# release and the corpus would no longer come from the checkout the results cite.
+# It drags in langchain, cohere, anthropic and google-genai; ChainWatch imports none
+# of them -- they belong to AgentDojo's own model-calling harness, which this
+# project bypasses entirely (only its tasks, envs, injections and checks are used).
+#
+# Route F (injecagent_bridge/) needs nothing at all: ./InjecAgent is read as data
+# (its data/*.json), and its src/ is never imported.

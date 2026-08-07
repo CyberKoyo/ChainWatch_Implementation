@@ -61,6 +61,71 @@ def utc_now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def build_trace_line(
+    *,
+    server: str,
+    tool: str,
+    stage: Any,
+    severity: str,
+    rules: Any,
+    blocked: bool,
+    session: str = "",
+    label: str = "",
+    source: str = "",
+    call: int = 0,
+    arguments: Any = None,
+    include_arguments: bool = False,
+    vector: Any = None,
+    provenance: Any = None,
+    model: str | None = None,
+) -> dict[str, Any]:
+    """Assemble one JSONL trace line.
+
+    Pure, and free of the verdict object, so the schema is testable on its own --
+    which is the point of extracting it: a field that matters and is absent gets
+    silently defaulted downstream (§10, and note 32 for ``model``).
+
+    Identity first, then evidence, so a line stays readable at a glance and sorts
+    sensibly when a day's log is eyeballed rather than parsed.
+    """
+    entry: dict[str, Any] = {"ts": utc_now()}
+    if session:
+        entry["session"] = session
+    if label:
+        entry["label"] = label
+    if source:
+        entry["source"] = source
+    if call:
+        entry["call"] = call
+
+    entry.update(
+        {
+            "server": server,
+            "tool": tool,
+            "stage": stage,
+            "severity": severity,
+            "rules": rules,
+            "blocked": blocked,
+        }
+    )
+    if include_arguments:
+        entry["args"] = REDACTED if blocked else arguments
+    if vector is not None:
+        entry["v"] = [round(float(x), 4) for x in vector]
+
+    # Additive and optional, so both trace consumers keep working unchanged --
+    # they key on `session`, `call` and `v`, and skip what they do not know.
+    # Arrives as a Provenance in-process and as a bare string from the daemon.
+    if provenance is not None:
+        entry["prov"] = provenance if isinstance(provenance, str) else provenance.name
+
+    # note 32: which model produced this session. Written even when unknown -- an
+    # explicit null asserts "the capture named no model", which is a different fact
+    # from a reader that never looked, and it cannot be recovered afterwards.
+    entry["model"] = model
+    return entry
+
+
 class AuditLog:
     """Append-only daily log. Failures here never propagate to the proxy."""
 
@@ -69,10 +134,15 @@ class AuditLog:
         directory: Path | str = DEFAULT_LOG_DIR,
         enabled: bool = True,
         include_arguments: bool = True,
+        model: str | None = None,
     ) -> None:
         self.directory = Path(directory)
         self.enabled = enabled
         self.include_arguments = include_arguments
+        # note 32: the producing model is a property of the whole capture, not of a
+        # call, so it is held here and stamped on every line rather than threaded
+        # through the interceptor on each record().
+        self.model = model
 
     def record(
         self,
@@ -98,39 +168,23 @@ class AuditLog:
         if blocked is None:
             blocked = verdict.blocked
 
-        # Identity first, then evidence, so a line stays readable at a glance and
-        # sorts sensibly when a day's log is eyeballed rather than parsed.
-        entry: dict[str, Any] = {"ts": utc_now()}
-        if session:
-            entry["session"] = session
-        if label:
-            entry["label"] = label
-        if source:
-            entry["source"] = source
-        if call:
-            entry["call"] = call
-
-        entry.update(
-            {
-                "server": server,
-                "tool": tool,
-                "stage": verdict.stage,
-                "severity": verdict.severity.name,
-                "rules": verdict.rules_fired,
-                "blocked": blocked,
-            }
+        entry = build_trace_line(
+            server=server,
+            tool=tool,
+            stage=verdict.stage,
+            severity=verdict.severity.name,
+            rules=verdict.rules_fired,
+            blocked=blocked,
+            session=session,
+            label=label,
+            source=source,
+            call=call,
+            arguments=arguments,
+            include_arguments=self.include_arguments,
+            vector=vector,
+            provenance=getattr(verdict, "provenance", None),
+            model=self.model,
         )
-        if self.include_arguments:
-            entry["args"] = REDACTED if blocked else arguments
-        if vector is not None:
-            entry["v"] = [round(float(x), 4) for x in vector]
-
-        # Additive and optional, so both trace consumers keep working unchanged --
-        # they key on `session`, `call` and `v`, and skip what they do not know.
-        # Arrives as a Provenance in-process and as a bare string from the daemon.
-        provenance = getattr(verdict, "provenance", None)
-        if provenance is not None:
-            entry["prov"] = provenance if isinstance(provenance, str) else provenance.name
 
         try:
             self.directory.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__inj"
+    ],
+    "deny": [
+      "Read",
+      "Write",
+      "Edit",
+      "NotebookEdit",
+      "Glob",
+      "Grep",
+      "Bash",
+      "WebFetch",
+      "WebSearch",
+      "mcp__plugin_ecc_github",
+      "mcp__plugin_ecc_memory",
+      "mcp__plugin_ecc_context7",
+      "mcp__plugin_ecc_exa",
+      "mcp__plugin_ecc_playwright",
+      "mcp__plugin_ecc_sequential-thinking"
+    ]
+  },
+  "hooks": {}
+}
