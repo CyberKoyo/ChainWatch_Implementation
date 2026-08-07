@@ -196,3 +196,98 @@ Then the measurement this is all for: **the false-positive rate on captured beni
 alone**, against Phase 7's synthetic 17.5%. That number decides whether R3 is deployable.
 Report `devwork`, `research` and `bizops` as separate rows — `bizops` is the one that carries
 payments and email, so it is the row R2, R3 and R5 are actually answerable to.
+
+---
+
+## Routes E and F — indirect injection (Phase 17)
+
+The routes above all ask the agent to do the work and label the session by intent. These
+two plant a **published injection payload in the data the agent reads** and leave the
+prompt alone. Both halves of a route run the same published task under the same executor;
+the only difference is what the server serves. That is why a refusal here still yields a
+trajectory — the agent does the benign task regardless — where routes C's attack half
+yielded 0 calls 100% of the time.
+
+| | route E | route F |
+|---|---|---|
+| benchmark | AgentDojo, vendored `./agentdojo` (installed editable) | InjecAgent, vendored `./InjecAgent` (data only) |
+| domain | office: workspace / banking / travel / slack | developer: GitHub user tool, attacker tools elsewhere |
+| recipes | `docs/recipes_agentdojo.tsv` | `docs/recipes_injecagent.tsv` |
+| driver | `scripts/capture_agentdojo.sh` | `scripts/capture_injecagent.sh` |
+| `source` | `agentdojo` | `injecagent` |
+| success | AgentDojo `security()`, in the score sidecar | an attacker tool was called |
+
+### 1. Gate first — free, no quota
+
+```bash
+.venv/bin/python scripts/agentdojo_decidability.py     # must print PASS
+```
+
+It replays each injection task's own `ground_truth()` and requires `security()` to flag
+it, with a clean run not flagging. **Never capture if this fails** — the pipeline could
+not then tell an attack from a benign run, and every attack session would be recorded as
+resisted. Two tasks are expected to print `UNSCORABLE` and are already dropped from the
+grid; a *third* means something drifted, and the gate exits non-zero.
+
+### 2. Regenerate the recipes — never hand-edit either TSV
+
+```bash
+.venv/bin/python scripts/gen_agentdojo_recipes.py  --out docs/recipes_agentdojo.tsv
+.venv/bin/python scripts/gen_injecagent_recipes.py --out docs/recipes_injecagent.tsv
+```
+
+### 3. Dry-run the driver before spending anything
+
+```bash
+head -3 docs/recipes_agentdojo.tsv > /tmp/adojo_smoke.tsv
+DRY=1 scripts/capture_agentdojo.sh /tmp/adojo_smoke.tsv
+```
+
+Check three things in the printed config: `--inject` appears on attack rows **and only**
+on attack rows (route F: `--benign` on benign rows and only those), the cwd is
+`~/.chainwatch/agent-cwd` and not the repo, and `--model` is present on the `chainwatch`
+argv.
+
+### 4. Live smoke, then batches
+
+```bash
+.venv/bin/python scripts/gen_agentdojo_recipes.py --out /tmp/adojo_smoke.tsv --limit-per-suite 1
+scripts/capture_agentdojo.sh /tmp/adojo_smoke.tsv 1
+
+.venv/bin/python scripts/gen_injecagent_recipes.py --out /tmp/inj_smoke.tsv --limit 1
+scripts/capture_injecagent.sh /tmp/inj_smoke.tsv 1
+```
+
+Slice by feeding a smaller file (`head`, or `grep '^attack'`), never by inventing a flag —
+the recipes are generated, so a slice is reproducible. Each invocation stamps its own
+`RUN`, so batches compose and never collide (note 18). Size **route E** batches by calls
+(~450–500 recorded calls per quota window, §12's re-measured burn) and **route F** batches
+by case count, since its sessions are one user tool plus whatever follows.
+
+### 5. What to check afterwards
+
+1. `source=agentdojo` / `source=injecagent` on the trace lines, and `model=claude-opus-5`
+   on every one of them. A `null` there means the driver was bypassed.
+2. A score sidecar per session, appended to `~/.chainwatch/agentdojo_scores-$RUN.jsonl` /
+   `injecagent_scores-$RUN.jsonl`. No sidecar means the server never reached stdin EOF.
+3. **Keep both outcomes.** `security=true` is the read→exfil trajectory the route exists
+   to produce; `security=false` is a resisted injection, which is a complete trajectory
+   and a real measurement. Discarding those would rebuild the refusal deadlock by hand.
+4. Benign rows carry `injection_task=null` (E) / `benign=true` (F). A benign row with an
+   injection coordinate means the TSV columns were misparsed.
+5. `dim 9` is 0 and R2 never fires on either route. That is **structural**, not a bug:
+   one session serves one server, so there is no cross-server state and the drivers pass
+   `--no-daemon` to say so honestly rather than leaving it silently dead (note 17).
+
+Then:
+
+```bash
+.venv/bin/python -m chainwatch.ml.evaluate --population agentdojo
+.venv/bin/python -m chainwatch.ml.evaluate --population injecagent
+```
+
+Read each permutation floor. If a population's attack class clears it, report the five
+arms for that population; if not, the rule-level benign false-positive table plus the
+attack-success rate *are* that population's deliverable — the §12 fallback, now with a
+real attack class behind it. Report the two apart, and never pooled with `realism`,
+`control`, `bizops` or the twins.
