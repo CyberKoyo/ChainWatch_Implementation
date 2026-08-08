@@ -458,6 +458,32 @@ def test_injection_populations_do_not_pool_with_each_other():
     assert set(POPULATIONS["agentdojo"].train).isdisjoint(POPULATIONS["injecagent"].train)
 
 
+def test_gpt4omini_injection_populations_select_only_their_exact_source():
+    """Model identity is metadata; source is the enforced population boundary."""
+    for name in ("agentdojo-gpt4omini", "injecagent-gpt4omini"):
+        populations = POPULATIONS[name]
+        assert populations.train == (name,)
+        assert populations.false_positive == name
+        assert populations.control is None
+        assert populations.held == ()
+
+
+def test_gpt4omini_populations_do_not_pool_routes_or_claude_executor_rows():
+    sources = {
+        name: set(POPULATIONS[name].train)
+        for name in (
+            "agentdojo",
+            "injecagent",
+            "agentdojo-gpt4omini",
+            "injecagent-gpt4omini",
+        )
+    }
+
+    for name, selected in sources.items():
+        assert selected == {name}
+        assert all(selected.isdisjoint(other) for key, other in sources.items() if key != name)
+
+
 def test_adding_injection_populations_left_the_existing_ones_alone():
     """Every measured figure in CLAUDE.md §12 belongs to these three."""
     assert POPULATIONS["synthetic"].train == TRAIN_SOURCES

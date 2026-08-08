@@ -176,12 +176,37 @@ INJECAGENT = Populations(
     held=(),
 )
 
+#: The GPT-4o-mini captures use the same Route E benchmark and data-channel split as
+#: ``AGENTDOJO`` but a different executor and system prompt. The trace ``model`` field
+#: is not part of population selection, so sharing ``source=agentdojo`` would silently
+#: pool GPT and Claude rows. A dedicated source closes that leak structurally.
+AGENTDOJO_GPT4OMINI = Populations(
+    name="agentdojo (route E, GPT-4o-mini executor)",
+    train=("agentdojo-gpt4omini",),
+    false_positive="agentdojo-gpt4omini",
+    control=None,
+    held=(),
+)
+
+#: Route F's matching GPT-4o-mini population. It remains separate from both its
+#: Claude-executor sibling and Route E because executor identity and trajectory shape
+#: are independently usable labels.
+INJECAGENT_GPT4OMINI = Populations(
+    name="injecagent (route F, GPT-4o-mini executor)",
+    train=("injecagent-gpt4omini",),
+    false_positive="injecagent-gpt4omini",
+    control=None,
+    held=(),
+)
+
 POPULATIONS = {
     "synthetic": SYNTHETIC,
     "real": REAL,
     "twins": TWINS,
     "agentdojo": AGENTDOJO,
     "injecagent": INJECAGENT,
+    "agentdojo-gpt4omini": AGENTDOJO_GPT4OMINI,
+    "injecagent-gpt4omini": INJECAGENT_GPT4OMINI,
 }
 
 
