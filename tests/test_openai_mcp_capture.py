@@ -406,6 +406,23 @@ def test_api_error_does_not_leak_key_and_key_is_removed_from_mcp_environment(tmp
     assert secret not in (tmp_path / "usage.jsonl").read_text(encoding="utf-8")
 
 
+def test_usage_row_records_the_price_basis(tmp_path):
+    env, _score = _score_env(tmp_path)
+    client = _FakeOpenAI([_completion(content="done")])
+    spec = _spec(tmp_path, env=env)
+
+    run_session(spec, openai_client=client)
+
+    rows = [
+        json.loads(line)
+        for line in spec.usage_path.read_text(encoding="utf-8").splitlines()
+    ]
+    response_rows = [row for row in rows if row["type"] == "response"]
+    assert response_rows
+    assert all(row["cost_basis"] == MODEL for row in response_rows)
+    assert all(row["cost_is_estimate"] is False for row in response_rows)
+
+
 def test_run_session_cannot_construct_a_live_client_implicitly(tmp_path):
     with pytest.raises(TypeError, match="openai_client"):
         run_session(_spec(tmp_path))

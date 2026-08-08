@@ -345,6 +345,27 @@ def test_injecagent_split_filter_selects_one_split(tmp_path):
     assert {row["split"] for row in printed} == {"dh"}
 
 
+def test_dry_run_creates_no_state_directories(tmp_path):
+    state = tmp_path / "state"
+    subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/capture_agentdojo_openai.py"),
+            "--dry-run",
+            "--limit",
+            "1",
+            "--state-dir",
+            str(state),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=ROOT,
+    )
+
+    assert not state.exists(), "a dry run must not touch the filesystem"
+
+
 def test_live_agentdojo_requires_explicit_api_confirmation(tmp_path):
     recipes = tmp_path / "agentdojo.tsv"
     recipes.write_text(

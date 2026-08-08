@@ -719,6 +719,11 @@ def run_session(
                     "completion_tokens": turn_completion,
                     "cached_tokens": turn_cached,
                     "estimated_cost_usd": turn_cost,
+                    # Priced at the requested model. On a mismatch the session is about
+                    # to be rejected, but the money was still spent -- say what the
+                    # number is worth rather than dropping it.
+                    "cost_basis": spec.requested_model,
+                    "cost_is_estimate": resolved_model != spec.requested_model,
                     "executor": spec.executor,
                     "system_prompt_sha256": system_hash,
                     "max_turns": spec.max_turns,

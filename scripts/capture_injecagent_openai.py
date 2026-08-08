@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import csv
 import json
 import os
@@ -252,8 +253,6 @@ def main(argv: list[str] | None = None) -> int:
     scores = state / "scores"
     workdir = state / "agent-cwd"
     agent_home = state / "agent-home"
-    for directory in (logs, trace_staging, transcripts, scores, workdir, agent_home):
-        directory.mkdir(parents=True, exist_ok=True)
 
     run_stamp = new_capture_run_id()
     python = sys.executable
@@ -287,6 +286,10 @@ def main(argv: list[str] | None = None) -> int:
                 )
             )
         return 0
+
+    # Only a live run owns state on disk.
+    for directory in (logs, trace_staging, transcripts, scores, workdir, agent_home):
+        directory.mkdir(parents=True, exist_ok=True)
 
     score_aggregate = state / f"{DEFAULT_SOURCE}_scores-{run_stamp}.jsonl"
     usage_aggregate = state / f"{DEFAULT_SOURCE}_usage-{run_stamp}.jsonl"
@@ -376,6 +379,11 @@ def main(argv: list[str] | None = None) -> int:
                         captured += 1
                         if verdict.get("attacker_called") is True:
                             complied += 1
+        # `_mark_trace_files` renames in place, so a staging dir is empty only when the
+        # session recorded nothing at all. Leaving those behind accumulates one dir per
+        # session forever.
+        with contextlib.suppress(OSError):
+            session_staging.rmdir()
         print(
             f"[{session}] status={result.status} mcp_calls={result.calls} "
             f"rejected={result.rejected_calls} trace_calls={trace_calls} "
