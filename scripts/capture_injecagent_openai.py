@@ -196,6 +196,13 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="capture_injecagent_openai.py")
     parser.add_argument("recipes", nargs="?", type=Path, default=ROOT / "docs/recipes_injecagent.tsv")
     parser.add_argument("--limit", type=_positive_int, default=None)
+    parser.add_argument(
+        "--split",
+        action="append",
+        choices=("ds", "dh"),
+        default=None,
+        help="restrict to one or more InjecAgent splits; repeatable. Applied before --limit.",
+    )
     parser.add_argument("--model", choices=(DEFAULT_MODEL,), default=DEFAULT_MODEL)
     parser.add_argument("--max-cost-usd", type=_nonnegative_float, default=3.0)
     parser.add_argument("--max-turns", type=_positive_int, default=12)
@@ -228,6 +235,11 @@ def main(argv: list[str] | None = None) -> int:
         recipes = load_recipes(options.recipes)
     except ValueError as error:
         parser.error(str(error))
+    if options.split:
+        wanted = set(options.split)
+        recipes = [recipe for recipe in recipes if recipe.split in wanted]
+        if not recipes:
+            parser.error(f"no recipes for split(s): {', '.join(sorted(wanted))}")
     if options.limit is not None:
         recipes = recipes[: options.limit]
     if not recipes:

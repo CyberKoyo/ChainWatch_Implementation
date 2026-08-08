@@ -178,6 +178,13 @@ def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="capture_agentdojo_openai.py")
     parser.add_argument("recipes", nargs="?", type=Path, default=ROOT / "docs/recipes_agentdojo.tsv")
     parser.add_argument("--limit", type=_positive_int, default=None)
+    parser.add_argument(
+        "--suite",
+        action="append",
+        choices=("banking", "slack", "travel", "workspace"),
+        default=None,
+        help="restrict to one or more suites; repeatable. Applied before --limit.",
+    )
     parser.add_argument("--model", choices=(DEFAULT_MODEL,), default=DEFAULT_MODEL)
     parser.add_argument("--max-cost-usd", type=_nonnegative_float, default=3.0)
     parser.add_argument("--max-turns", type=_positive_int, default=12)
@@ -210,6 +217,11 @@ def main(argv: list[str] | None = None) -> int:
         recipes = load_recipes(options.recipes)
     except ValueError as error:
         parser.error(str(error))
+    if options.suite:
+        wanted = set(options.suite)
+        recipes = [recipe for recipe in recipes if recipe.suite in wanted]
+        if not recipes:
+            parser.error(f"no recipes for suite(s): {', '.join(sorted(wanted))}")
     if options.limit is not None:
         recipes = recipes[: options.limit]
     if not recipes:

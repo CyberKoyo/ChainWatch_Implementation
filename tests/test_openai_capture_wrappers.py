@@ -297,6 +297,54 @@ def test_injecagent_dry_run_prints_three_recipe_variants_without_api_use(tmp_pat
     assert "sk-test-wrapper-must-not-use" not in completed.stdout
 
 
+def test_agentdojo_suite_filter_selects_one_environment(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/capture_agentdojo_openai.py"),
+            "--dry-run",
+            "--suite",
+            "travel",
+            "--limit",
+            "3",
+            "--state-dir",
+            str(tmp_path / "state"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=ROOT,
+    )
+
+    printed = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert len(printed) == 3
+    assert {row["suite"] for row in printed} == {"travel"}
+
+
+def test_injecagent_split_filter_selects_one_split(tmp_path):
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(ROOT / "scripts/capture_injecagent_openai.py"),
+            "--dry-run",
+            "--split",
+            "dh",
+            "--limit",
+            "3",
+            "--state-dir",
+            str(tmp_path / "state"),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=ROOT,
+    )
+
+    printed = [json.loads(line) for line in result.stdout.splitlines() if line.strip()]
+    assert len(printed) == 3
+    assert {row["split"] for row in printed} == {"dh"}
+
+
 def test_live_agentdojo_requires_explicit_api_confirmation(tmp_path):
     recipes = tmp_path / "agentdojo.tsv"
     recipes.write_text(
