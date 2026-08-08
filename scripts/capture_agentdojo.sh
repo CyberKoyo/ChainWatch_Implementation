@@ -91,6 +91,10 @@ config = {
             "args": [
                 "-y", "mcpwall", "--",
                 sys.executable, "-m", "chainwatch",
+                # Without this the proxy names the server after the last argv token --
+                # the score-file path here -- and ml/dataset.py reads that as the
+                # leave-one-environment-out environment.
+                "--server", os.environ["SUITE"],
                 "--observe-only", "--no-daemon",
                 "--label", os.environ["LABEL"],
                 "--source", os.environ["CAPTURE_PROFILE"],
