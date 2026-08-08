@@ -291,3 +291,173 @@ arms for that population; if not, the rule-level benign false-positive table plu
 attack-success rate *are* that population's deliverable — the §12 fallback, now with a
 real attack class behind it. Report the two apart, and never pooled with `realism`,
 `control`, `bizops` or the twins.
+
+### GPT-4o-mini executor — separate populations, separately billed
+
+The OpenAI drivers run the same generated Route E/F recipes through pinned
+`gpt-4o-mini-2024-07-18`. They are not replacements for the Claude rows and do not
+share their source tags:
+
+| | route E | route F |
+|---|---|---|
+| driver | `scripts/capture_agentdojo_openai.py` | `scripts/capture_injecagent_openai.py` |
+| `source` | `agentdojo-gpt4omini` | `injecagent-gpt4omini` |
+| evaluator population | `agentdojo-gpt4omini` | `injecagent-gpt4omini` |
+
+The model id is pinned rather than aliased. Every Chat Completions response carries a
+resolved model id; the runner compares it with the requested snapshot before forwarding
+that response's tool calls. A mismatch ends the session, so ChainWatch's static
+`model=gpt-4o-mini-2024-07-18` trace field cannot silently describe a remapped model.
+
+The executor is intentionally recorded as its own experimental variable. Usage JSONL
+contains the requested/resolved model, executor id, system-prompt hash, max-turn cap,
+prompt tokens, cached tokens, completion tokens, and estimated USD for every response.
+Transcripts contain the benchmark prompt and tool loop but never the API key. The MCP
+subprocess gets an allowlisted environment and isolated `agent-home`; API keys, cloud
+credentials, repository tokens, and other unrelated parent variables are not inherited
+by `mcpwall` or the benchmark tools.
+
+The library runner requires an already-constructed client, so it cannot silently opt
+itself into billing. After the CLI confirmation gate, the wrapper creates one SDK
+client with automatic retries disabled and a 60-second API request timeout. MCP
+requests have a 30-second deadline, and timeout cleanup terminates the complete
+`npx`/ChainWatch/benchmark process group.
+
+#### Free local dry run
+
+Generate small, reproducible recipe slices:
+
+```bash
+.venv/bin/python scripts/gen_agentdojo_recipes.py \
+  --out /tmp/adojo_gpt_smoke.tsv --limit-per-suite 1
+.venv/bin/python scripts/gen_injecagent_recipes.py \
+  --out /tmp/inj_gpt_smoke.tsv --limit 1
+```
+
+Print complete argv chains without constructing an OpenAI client or launching `npx`:
+
+```bash
+.venv/bin/python scripts/capture_agentdojo_openai.py \
+  /tmp/adojo_gpt_smoke.tsv --limit 2 --dry-run
+.venv/bin/python scripts/capture_injecagent_openai.py \
+  /tmp/inj_gpt_smoke.tsv --limit 3 --dry-run
+```
+
+Each JSON line must show this ordering:
+
+```text
+npx -y mcpwall -- <python> -m chainwatch ... -- <python> -m <benchmark server>
+```
+
+Also check the fixed GPT-specific source, pinned model, neutral `agent-cwd`, and that
+`--inject`/`--benign` appears only on the correct half.
+
+A dry run creates **no** state directories — nothing under `--state-dir` is touched
+until a live run owns it.
+
+#### Environment filters and what `--server` now carries
+
+`--server` is passed explicitly by every driver: route E writes its **suite**, route F
+the constant `injecagent-dev`. That field is the environment `chainwatch/ml/dataset.py`
+groups on for leave-one-environment-out. Check it directly, free of API cost:
+
+```bash
+.venv/bin/python scripts/capture_agentdojo_openai.py --dry-run --limit 8 \
+  | jq -r '.chain_argv[(.chain_argv | index("--server")) + 1]' | sort -u
+.venv/bin/python scripts/capture_injecagent_openai.py --dry-run --limit 6 \
+  | jq -r '.chain_argv[(.chain_argv | index("--server")) + 1]' | sort -u
+```
+
+Route E must print more than one suite and never `score.json`; route F exactly
+`injecagent-dev`.
+
+The generated grids are round-robined across environments, so any prefix — whatever
+`--limit` or the spend budget cuts it to — still covers all four suites and both
+splits, with each user task's benign row and its attack rows kept adjacent. For a
+*targeted* top-up of one environment, both wrappers accept a repeatable filter applied
+**before** `--limit`:
+
+- route E: `--suite {banking,slack,travel,workspace}` — `--suite travel --limit 5`
+  means five travel sessions, not five rows that happen to be travel;
+- route F: `--split {ds,dh}`.
+
+An empty selection is an argparse error, not a silent zero-session run.
+
+#### Reading the per-session line
+
+```text
+[<session>] status=completed mcp_calls=4 rejected=1 trace_calls=4 cost=$0.001234
+```
+
+`rejected=` counts tool calls answered with a JSON-RPC **error** — how `mcpwall`, which
+sits above ChainWatch, refuses a call. Such a call never reaches the benchmark server
+and produces no trace row, so it is deliberately **not** part of `mcp_calls`: the native
+sidecar's `calls`, the executor's `calls`, and the published trace-row count must stay
+equal. The rejection is returned to the model as a tool error, so one filtered call no
+longer discards the whole session.
+
+#### Live smoke — do not run without explicit operator confirmation
+
+OpenAI API billing is separate from a Codex/ChatGPT login. Live mode requires both
+`OPENAI_API_KEY` and `--confirm-api-usage`; omission of the flag exits before the SDK
+client is constructed.
+
+After the operator has explicitly approved API spending:
+
+```bash
+.venv/bin/python scripts/capture_agentdojo_openai.py \
+  /tmp/adojo_gpt_smoke.tsv --limit 2 \
+  --max-cost-usd 0.25 --confirm-api-usage
+.venv/bin/python scripts/capture_injecagent_openai.py \
+  /tmp/inj_gpt_smoke.tsv --limit 3 \
+  --max-cost-usd 0.25 --confirm-api-usage
+```
+
+Sizing, from the prices pinned at `chainwatch/capture/openai_mcp.py:35`
+($0.15/$0.075/$0.60 per 1M input/cached/output tokens): a 12-turn session costs roughly
+**$0.015–0.02**, so route E's 452-row grid is **≈$7–9** and the 1,010-row E/F grid
+proportionally more. The default `--max-cost-usd 3.0` therefore funds about a third of
+route E — **raising it is an operator decision**, not something a driver should assume.
+A capped run now stops at a *representative* prefix rather than a banking-only one,
+because the grids are round-robined across environments. This smoke, at `--limit 2`/`3`,
+stays well below $0.25.
+
+The runner's budget is an **observed-spend stop**, not a prepaid hard ceiling: API usage
+arrives after a response, so the total can exceed `--max-cost-usd` by at most one
+response before the next request is refused. Set a project-level platform spend limit as
+the external hard ceiling.
+
+Outputs live under `CHAINWATCH_HOME` (default `~/.chainwatch`):
+
+- `logs/<session>.jsonl` — one atomically published, validated XGBoost trajectory;
+- `trace-staging/<session>/*.jsonl.published` — raw rows already copied to the corpus;
+- `trace-staging/<session>/*.jsonl.rejected` — retained evidence from invalid sessions;
+- `transcripts/<session>.jsonl` — model/tool loop;
+- `scores/<session>.json` — native benchmark verdict;
+- `<source>_scores-<RUN>.jsonl` — aggregated native verdicts;
+- `<source>_usage-<RUN>.jsonl` — per-response and per-session usage/cost.
+
+Missing score sidecar means the benchmark server did not reach EOF. It is an invalid
+session, never a resisted injection. A run with zero sessions containing traced tool
+calls exits nonzero.
+
+The wrappers do not write directly into the final corpus. They first validate the
+native sidecar, successful/bounded executor status, MCP exit status, exact trace-call
+count, session, source, and pinned model. Only then is a complete per-session file
+linked atomically into `logs/`; an existing session destination is never overwritten
+or appended. Rejected rows are renamed so broad `*.jsonl` inputs cannot accidentally
+ingest a partial session.
+
+Evaluate the GPT populations independently and pass the actual trace file explicitly:
+
+```bash
+.venv/bin/python -m chainwatch ml-eval \
+  --traces ~/.chainwatch/logs/agentdojo-gpt4omini-*.jsonl \
+  --population agentdojo-gpt4omini --skip-permutation
+.venv/bin/python -m chainwatch ml-eval \
+  --traces ~/.chainwatch/logs/injecagent-gpt4omini-*.jsonl \
+  --population injecagent-gpt4omini --skip-permutation
+```
+
+Do not pool either GPT population with its Claude benchmark sibling. The `model` field
+is metadata; `chainwatch/ml/evaluate.py` selects populations on `source`.

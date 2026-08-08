@@ -62,16 +62,16 @@ traces, tests, and paper claims depend on this exact shape:
 | 0-4 | TC | Tool category one-hot: READ, WRITE, EXECUTE, NETWORK, CONFIGURE |
 | 5 | PS | Parameter sensitivity |
 | 6-9 | DF | Internal read, external write, chained flow, cross-server flow |
-| 10-12 | TF | Call rate, inter-call timing, burstiness |
+| 10-12 | TF | Inter-call interval, call rate over window k, session age |
 | 13-19 | OC | Imperative, XML, mismatch, volume, hash change, encoded, external URL |
 
 Destination provenance is sidecar state on call records and trace rows. It is not a
 21st HMM feature. The supervised XGBoost dataset may one-hot provenance separately,
 but the HMM vector remains 20-dimensional.
 
-The six HMM stages are Reconnaissance, Initial Access, Execution, Credential Access,
-Collection, and Exfiltration/Persistence. R1-R5 reason over ordered calls and the
-sliding window; do not replace sequential semantics with isolated-call checks.
+The six HMM stages are Reconnaissance, Trust Building, Injection, Escalation, Lateral
+Movement, and Exfiltration. R1-R5 reason over ordered calls and the sliding window;
+do not replace sequential semantics with isolated-call checks.
 
 ## Trace contract
 
@@ -162,10 +162,49 @@ session can recover. Do not truncate and label such a session as quiet. Closing 
 MCP client must close stdin and wait for the server so its scorer can write the
 sidecar.
 
+Capture each session into its own staging log. Publish rows into the XGBoost corpus
+only when the executor ends as `completed` or at the configured `max_turns`, the MCP
+chain exits successfully, the native score sidecar parses, and staged row count,
+session, source, and model all match the executor result. Rename rejected staged
+files away from `*.jsonl` globs while preserving them for diagnosis. Publish each
+accepted session as its own atomic corpus file; never append a session piecemeal to a
+shared daily log.
+
 `OPENAI_API_KEY` is read from the parent process environment by the SDK. Never print
-or persist it, and remove it from the environment passed to `mcpwall`, ChainWatch,
-and benchmark subprocesses. Live API use requires explicit operator confirmation;
-unit tests use fake clients and dry runs launch neither OpenAI nor `npx`.
+or persist it. Pass `mcpwall`, ChainWatch, and benchmark subprocesses an allowlisted
+environment with a neutral HOME/cache; do not expose unrelated parent credentials.
+Live API use requires explicit operator confirmation; unit tests use fake clients and
+dry runs launch neither OpenAI nor `npx`.
+
+**Never construct a capture chain without `--server`.** `build_mcpwall_chain_argv`
+requires `server_name` and every driver passes it, because the proxy otherwise names
+the server after the last argv token. See the limitations below.
+
+## Known limitations of the OpenAI executor
+
+`CLAUDE.md` §14 is authoritative and wins on any conflict; these are the same points.
+
+- **The system prompt is authored in this repo** (`chainwatch/capture/openai_mcp.py`,
+  `DEFAULT_SYSTEM_PROMPT`). It is byte-identical across both halves and its sha256 is
+  written to every usage row, so it cannot carry a label — but the Claude routes run
+  under Claude Code's own system prompt, so GPT and Claude sessions differ by executor
+  and prompt and can never be compared. Report them apart, always.
+- **`server` is the environment**, asserted rather than derived: route E writes its
+  suite, route F the constant `injecagent-dev`. The old argv fallback read the
+  score-file path on one half and `--benign` on the other, making `ml/dataset.py`'s
+  leave-one-environment-out grouping unique-per-session on E and label-correlated on F.
+  Same species as `win_occupancy`, PS and provenance.
+- **Route F has one environment.** All 558 recipe rows drive a GitHub user tool, so
+  leave-one-environment-out is unavailable there; route F carries the dev-domain signal
+  only.
+- **A rejected tool call is not a failed session.** `mcpwall` sits above ChainWatch and
+  refuses by returning a JSON-RPC error, which never reaches the bridge and never
+  produces a trace row. Count those as `rejected_calls`, feed them back to the model as
+  a tool error, and keep them out of `calls` so the native sidecar, the executor count
+  and the published row count stay equal.
+- **The observed-spend budget cuts the recipe file at a prefix.** The grids are
+  round-robined across environments so a prefix stays representative, and `--suite` /
+  `--split` exist for topping one environment up.
 
 ## Development and verification
 
@@ -184,6 +223,7 @@ For capture work, verify at minimum:
 - dry-run output contains the pinned model and isolated source;
 - zero captured calls exits nonzero;
 - missing scorer sidecars are reported as failures;
+- partial or metadata-mismatched traces remain outside the final corpus;
 - GPT population selectors are disjoint from Claude and from each other;
 - changed files contain no API keys or other credentials.
 
@@ -201,4 +241,3 @@ Claude/GPT number as though it measured one population.
 - Do not infer resistance from zero calls or a missing score sidecar.
 - Do not trust a requested model id without checking the API response model.
 - Do not execute live API traffic without explicit operator confirmation.
-
