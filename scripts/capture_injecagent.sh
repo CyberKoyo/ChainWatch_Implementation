@@ -26,6 +26,11 @@ PROFILE="${PROFILE:-injecagent}"
 MODEL="${CHAINWATCH_MODEL:-claude-opus-5}"
 DRY="${DRY:-0}"
 
+# Byte-identical to route E's guard, and for the same reason: a retired model id is
+# silently remapped, so the trace would record a model that never ran. See
+# capture_agentdojo.sh.
+export CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP=1
+
 [ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
 [ -f "$RECIPES" ] || {
     echo "no recipe file at $RECIPES -- run scripts/gen_injecagent_recipes.py" >&2
@@ -48,6 +53,7 @@ write_mcp_config() {
     local path="$1" label="$2" split="$3" variant="$4" case_index="$5" score_out="$6"
     LABEL="$label" SPLIT="$split" VARIANT="$variant" CASE_INDEX="$case_index" \
     SCORE_OUT="$score_out" CAPTURE_MODEL="$MODEL" CAPTURE_PROFILE="$PROFILE" \
+    REPO_ROOT="$ROOT" \
     "$PYTHON" - "$path" <<'PY'
 import json, os, sys
 
@@ -81,6 +87,12 @@ config = {
                 "--",
                 sys.executable, *server,
             ],
+            # Byte-identical to route E's, and for the same reason: the server is
+            # `python -m injecagent_bridge...` launched from an empty cwd (note 30) with
+            # the project not pip-installed, so without this it dies at import and the
+            # session records 0 calls -- which reads as a quiet session, not a failure
+            # (note 14).
+            "env": {"PYTHONPATH": os.environ["REPO_ROOT"]},
         }
     }
 }

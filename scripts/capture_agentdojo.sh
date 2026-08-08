@@ -43,6 +43,14 @@ PROFILE="${PROFILE:-agentdojo}"
 MODEL="${CHAINWATCH_MODEL:-claude-opus-5}"
 DRY="${DRY:-0}"
 
+# A retired model id is silently remapped to its current replacement -- `--model
+# claude-opus-4-1` runs Opus 5 and says so only in a warning line. The driver would
+# still write the *requested* id to every trace line, so the corpus would carry a
+# `model` field that is present and wrong, which nothing downstream can detect. That
+# is strictly worse than note 32's absent field. This makes an unavailable model an
+# error instead of a substitution.
+export CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP=1
+
 [ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
 [ -f "$RECIPES" ] || {
     echo "no recipe file at $RECIPES -- run scripts/gen_agentdojo_recipes.py" >&2
@@ -70,6 +78,7 @@ write_mcp_config() {
     local path="$1" label="$2" suite="$3" user_task="$4" injection_task="$5" score_out="$6"
     INJECT="$injection_task" LABEL="$label" SUITE="$suite" UT="$user_task" \
     SCORE_OUT="$score_out" CAPTURE_MODEL="$MODEL" CAPTURE_PROFILE="$PROFILE" \
+    REPO_ROOT="$ROOT" \
     "$PYTHON" - "$path" <<'PY'
 import json, os, sys
 
@@ -103,6 +112,14 @@ config = {
                 "--",
                 sys.executable, *server,
             ],
+            # The server is `python -m agentdojo_bridge...`, and the agent runs from an
+            # empty cwd (note 30), so the repo is not on sys.path and the project is not
+            # pip-installed. Without this the server dies at import, the MCP handshake
+            # never completes, the agent sees zero mcp__adojo tools and records 0 calls --
+            # indistinguishable from a quiet session in the trace (note 14). Measured:
+            # full stack from the neutral cwd answers tools/list with PYTHONPATH and
+            # returns nothing without it.
+            "env": {"PYTHONPATH": os.environ["REPO_ROOT"]},
         }
     }
 }
