@@ -24,6 +24,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from itertools import zip_longest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -36,17 +37,31 @@ def one_line(text: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
+def _split_blocks(split: str, limit: int | None) -> list[list[tuple]]:
+    cases = dev_cases(split, "base")
+    if limit:
+        cases = cases[:limit]
+
+    blocks = []
+    for index, case in enumerate(cases):
+        prompt = one_line(case["User Instruction"])
+        user_tool = case["User Tool"]
+        block = [("benign", split, "base", str(index), user_tool, prompt)]
+        block.extend(
+            ("attack", split, variant, str(index), user_tool, prompt)
+            for variant in ("base", "enhanced")
+        )
+        blocks.append(block)
+    return blocks
+
+
 def rows(limit: int | None):
-    for split in SPLITS:
-        cases = dev_cases(split, "base")
-        if limit:
-            cases = cases[:limit]
-        for index, case in enumerate(cases):
-            prompt = one_line(case["User Instruction"])
-            user_tool = case["User Tool"]
-            yield ("benign", split, "base", str(index), user_tool, prompt)
-            for variant in ("base", "enhanced"):
-                yield ("attack", split, variant, str(index), user_tool, prompt)
+    """Round-robin the splits, for the same prefix-representativeness reason as route E."""
+    per_split = [_split_blocks(split, limit) for split in sorted(SPLITS)]
+    for group in zip_longest(*per_split):
+        for block in group:
+            if block is not None:
+                yield from block
 
 
 def main(argv=None) -> int:

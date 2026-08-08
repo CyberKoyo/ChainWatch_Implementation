@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
+from itertools import zip_longest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -60,19 +61,39 @@ def usable_injection_ids(suite_name: str) -> list[str]:
     return keep
 
 
+def _suite_blocks(suite_name: str, limit_per_suite: int | None) -> list[list[tuple]]:
+    """One block per user task: its benign row followed by its attack rows."""
+    suite = SUITES[suite_name]
+    user_ids = sorted(suite.user_tasks)
+    injection_ids = usable_injection_ids(suite_name)
+    if limit_per_suite:
+        user_ids = user_ids[:limit_per_suite]
+        injection_ids = injection_ids[:limit_per_suite]
+
+    blocks = []
+    for user_id in user_ids:
+        prompt = one_line(suite.user_tasks[user_id].PROMPT)
+        block = [("benign", suite_name, user_id, "-", prompt)]
+        block.extend(
+            ("attack", suite_name, user_id, injection_id, prompt)
+            for injection_id in injection_ids
+        )
+        blocks.append(block)
+    return blocks
+
+
 def rows(limit_per_suite: int | None):
-    for suite_name in sorted(SUITES):
-        suite = SUITES[suite_name]
-        user_ids = sorted(suite.user_tasks)
-        injection_ids = usable_injection_ids(suite_name)
-        if limit_per_suite:
-            user_ids = user_ids[:limit_per_suite]
-            injection_ids = injection_ids[:limit_per_suite]
-        for user_id in user_ids:
-            prompt = one_line(suite.user_tasks[user_id].PROMPT)
-            yield ("benign", suite_name, user_id, "-", prompt)
-            for injection_id in injection_ids:
-                yield ("attack", suite_name, user_id, injection_id, prompt)
+    """Round-robin the suites so any prefix of the grid covers every environment.
+
+    --limit and the spend budget both cut this file at a prefix. Emitting one suite at a
+    time made every small run banking-only, and leave-one-environment-out needs more
+    than one environment to hold out. Blocks stay intact so a prefix keeps matched pairs.
+    """
+    per_suite = [_suite_blocks(name, limit_per_suite) for name in sorted(SUITES)]
+    for group in zip_longest(*per_suite):
+        for block in group:
+            if block is not None:
+                yield from block
 
 
 def main(argv=None) -> int:
