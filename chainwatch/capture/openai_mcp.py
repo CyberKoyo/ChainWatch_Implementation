@@ -55,6 +55,19 @@ class MCPError(RuntimeError):
     """The child process failed to satisfy the MCP JSON-RPC contract."""
 
 
+class MCPToolError(MCPError):
+    """One request was answered with a JSON-RPC error object.
+
+    Distinct from a transport failure: the pipe is still healthy and the session can
+    continue. On `tools/call` this is how a filter above ChainWatch -- mcpwall -- says
+    no, and the call never reached the benchmark server.
+    """
+
+    def __init__(self, message: str, code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+
+
 def new_capture_run_id() -> str:
     """Return a sortable run id with enough entropy for concurrent invocations."""
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
@@ -153,6 +166,7 @@ class SessionSpec:
 class SessionResult:
     session_id: str
     calls: int
+    rejected_calls: int
     status: str
     requested_model: str
     resolved_model: str | None
@@ -324,8 +338,11 @@ class MCPProcess:
             if response.get("id") != request_id:
                 continue
             if "error" in response:
-                message = (response.get("error") or {}).get("message", "MCP request failed")
-                raise MCPError(str(message))
+                error_object = response.get("error") or {}
+                raise MCPToolError(
+                    str(error_object.get("message", "MCP request failed")),
+                    error_object.get("code"),
+                )
             result = response.get("result")
             return result if isinstance(result, dict) else {"value": result}
 
@@ -586,6 +603,7 @@ def _safe_session_result(
     spec: SessionSpec,
     *,
     calls: int,
+    rejected_calls: int,
     status: str,
     resolved_model: str | None,
     prompt_tokens: int,
@@ -597,6 +615,7 @@ def _safe_session_result(
     return SessionResult(
         session_id=spec.session_id,
         calls=calls,
+        rejected_calls=rejected_calls,
         status=status,
         requested_model=spec.requested_model,
         resolved_model=resolved_model,
@@ -615,7 +634,7 @@ def run_session(
     budget: CaptureBudget | None = None,
 ) -> SessionResult:
     """Run one bounded model/MCP session and always drain the owned server."""
-    prompt_tokens = completion_tokens = cached_tokens = calls = 0
+    prompt_tokens = completion_tokens = cached_tokens = calls = rejected_calls = 0
     estimated_cost = 0.0
     resolved_model: str | None = None
     status = "mcp_error"
@@ -769,7 +788,32 @@ def run_session(
                     )
                     continue
 
-                result = process.call_tool(name, arguments)
+                try:
+                    result = process.call_tool(name, arguments)
+                except MCPToolError as tool_error:
+                    # Not counted as a call: it never reached the server, so the native
+                    # sidecar and the trace will not contain it either.
+                    rejected_calls += 1
+                    tool_text = json.dumps(
+                        {"error": "tool_call_rejected", "message": str(tool_error)},
+                        separators=(",", ":"),
+                    )
+                    messages.append(
+                        {"role": "tool", "tool_call_id": call_id, "content": tool_text}
+                    )
+                    _append_jsonl(
+                        spec.transcript_path,
+                        {
+                            "type": "tool_call_rejected",
+                            "session": spec.session_id,
+                            "turn": turn,
+                            "tool_call_id": call_id,
+                            "tool": name,
+                            "code": tool_error.code,
+                            "message": str(tool_error),
+                        },
+                    )
+                    continue
                 calls += 1
                 tool_text = _mcp_result_text(result)
                 messages.append(
@@ -809,6 +853,7 @@ def run_session(
     result = _safe_session_result(
         spec,
         calls=calls,
+        rejected_calls=rejected_calls,
         status=status,
         resolved_model=resolved_model,
         prompt_tokens=prompt_tokens,

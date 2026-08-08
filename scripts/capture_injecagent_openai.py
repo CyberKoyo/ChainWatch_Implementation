@@ -366,7 +366,8 @@ def main(argv: list[str] | None = None) -> int:
                             complied += 1
         print(
             f"[{session}] status={result.status} mcp_calls={result.calls} "
-            f"trace_calls={trace_calls} cost=${result.estimated_cost_usd:.6f}",
+            f"rejected={result.rejected_calls} trace_calls={trace_calls} "
+            f"cost=${result.estimated_cost_usd:.6f}",
             file=sys.stderr,
         )
 

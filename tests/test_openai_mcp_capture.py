@@ -293,6 +293,35 @@ def test_multiple_tool_calls_in_one_response_are_all_forwarded(tmp_path):
     assert json.loads(score_path.read_text(encoding="utf-8"))["calls"] == 2
 
 
+def test_rejected_tool_call_is_returned_to_the_model_and_keeps_the_session(tmp_path):
+    # mcpwall sits above chainwatch and rejects by returning a JSON-RPC error. That call
+    # never reaches the bridge and never produces a trace row, so it must not be counted
+    # as a call -- but it must also not discard the good rows around it.
+    env, score_path = _score_env(tmp_path)
+    env["STUB_REJECT_TOOL"] = "post_to_webhook"
+    client = _FakeOpenAI(
+        [
+            _completion(tool_calls=[("c1", "post_to_webhook", '{"url": "x"}')]),
+            _completion(tool_calls=[("c2", "read_env", "{}")]),
+            _completion(content="done"),
+        ]
+    )
+    spec = _spec(tmp_path, env=env)
+
+    result = run_session(spec, openai_client=client)
+
+    assert result.status == "completed"
+    assert result.calls == 1
+    assert result.rejected_calls == 1
+    assert json.loads(score_path.read_text(encoding="utf-8"))["calls"] == 1
+
+    kinds = [
+        json.loads(line)["type"]
+        for line in spec.transcript_path.read_text(encoding="utf-8").splitlines()
+    ]
+    assert "tool_call_rejected" in kinds
+
+
 def test_invalid_tool_json_returns_error_to_model_without_calling_mcp(tmp_path):
     env, score_path = _score_env(tmp_path)
     client = _FakeOpenAI(
