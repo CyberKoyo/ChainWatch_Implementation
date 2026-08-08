@@ -70,6 +70,9 @@ config = {
             "args": [
                 "-y", "mcpwall", "--",
                 sys.executable, "-m", "chainwatch",
+                # Constant: route F is one environment (every dev case is a GitHub user
+                # tool). The argv fallback would read `--benign` on one half only.
+                "--server", "injecagent-dev",
                 "--observe-only", "--no-daemon",
                 "--label", os.environ["LABEL"],
                 "--source", os.environ["CAPTURE_PROFILE"],
