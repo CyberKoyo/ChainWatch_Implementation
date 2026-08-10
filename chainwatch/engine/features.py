@@ -152,13 +152,84 @@ IMPERATIVE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
     )
 )
 
-#: Pseudo-XML wrappers are the common carrier for injected blocks, e.g.
-#: ``<IMPORTANT>`` or ``<instructions>``. Ordinary HTML is excluded to keep the
-#: signal specific.
-XML_TAG_RE = re.compile(
-    r"</?\s*(important|instruction|instructions|system|prompt|secret|hidden|admin|note_to_ai)\s*>",
-    re.IGNORECASE,
+#: Weak alone, diagnostic together. Each names one property of a payload that is
+#: *addressing the agent* rather than describing data: a directive aimed at the
+#: reader, or a reference to the surrounding interaction.
+#:
+#: The conjunction requirement is the whole design. A single directive is
+#: ordinary correspondence -- "please review the attached invoice" -- and the
+#: mailboxes route C and the twins read are full of them. What an injected block
+#: has to do, and ordinary mail does not, is tell the reader to act *and* relate
+#: that action to the task it is hijacking.
+#:
+#: Deliberately not covered: a bare polite request planted in a data field, which
+#: is InjecAgent's ``base`` family. It is textually identical to a colleague
+#: asking for the same thing, so catching it means flagging real correspondence.
+#: What separates those two is the provenance of the destination, which is A4's
+#: question and already has a mechanism -- not the prose.
+DIRECTIVE_PATTERNS: tuple[re.Pattern[str], ...] = tuple(
+    re.compile(p, re.IGNORECASE)
+    for p in (
+        # a directive aimed at the reader
+        r"\bdo\s+the\s+following\b",
+        r"\byou\s+(must|should|need\s+to|have\s+to|are\s+required\s+to)\b",
+        r"\b(before|after)\s+you\s+(can\s+)?(solve|complete|answer|do|proceed|continue)\b",
+        r"\bstrictly\s+adhere\b",
+        r"\bonce\s+you\s+have\b",
+        # a reference to the surrounding interaction
+        r"\bthe\s+task\s+(that\s+)?(i|you)\s+(gave|assigned|were\s+given)\b",
+        r"\b(my|the\s+following|these)\s+instructions?\b",
+        r"\bin\s+the\s+beginning\b",
+        r"\bthis\s+is\s+(an?\s+)?(important|urgent)\s+(message|instruction|notice)\b",
+        r"\bto\s+you,\s*(claude|assistant|ai|agent|model|gpt)\b",
+    )
 )
+
+#: One directive occurs in ordinary prose; two independent ones is the signal.
+DIRECTIVE_SIGNAL_MINIMUM = 2
+
+#: Tag names ordinary documents legitimately carry. Everything else in angle
+#: brackets is a wrapper somebody added, and a data response is not entitled to
+#: add wrappers.
+#:
+#: Inverting the test this way is what keeps the rule general. An allowlist of
+#: *suspicious* names only ever catches payloads whose author happened to pick a
+#: name already on the list -- which is how AgentDojo's ``<INFORMATION>`` passed
+#: all 27 of its injection tasks untouched while InjecAgent's ``enhanced``
+#: variant, which prepends the folk idiom, was caught 186 times out of 186.
+KNOWN_MARKUP_TAGS = frozenset(
+    """
+    a abbr address article aside b blockquote body br button caption cite code col
+    colgroup dd del details dfn div dl dt em fieldset figcaption figure footer form
+    h1 h2 h3 h4 h5 h6 head header hr html i iframe img input ins kbd label legend li
+    link main mark meta nav ol optgroup option p pre q s samp script section select
+    small source span strong style sub summary sup table tbody td textarea tfoot th
+    thead time title tr u ul var video wbr
+    """.split()
+)
+
+#: Matches a tag-shaped span; the name is then checked against the allowlist.
+#: A regex cannot express "not in this set" readably, so the split is deliberate.
+_TAG_SHAPE_RE = re.compile(r"</?\s*([A-Za-z][A-Za-z0-9_.:-]{0,40})\s*/?>")
+
+
+class _UnknownTagMatcher:
+    """Regex-compatible shim: ``.search(text)`` is truthy on an unknown tag.
+
+    Presented as a matcher rather than a bare function so the existing call sites
+    keep working unchanged -- both ``_fill_output_characteristics`` and
+    ``_attest_destinations`` already call ``XML_TAG_RE.search``.
+    """
+
+    @staticmethod
+    def search(text: str) -> re.Match[str] | None:
+        for match in _TAG_SHAPE_RE.finditer(text):
+            if match.group(1).lower() not in KNOWN_MARKUP_TAGS:
+                return match
+        return None
+
+
+XML_TAG_RE = _UnknownTagMatcher()
 
 #: mcpwall flags responses above 100 KB (``flag-large-responses``). Reused so the
 #: two layers call the same thing anomalous.
@@ -478,7 +549,11 @@ class FeatureExtractor:
         if not text:
             return
 
-        if any(pattern.search(text) for pattern in IMPERATIVE_PATTERNS):
+        directive_hits = sum(1 for pattern in DIRECTIVE_PATTERNS if pattern.search(text))
+        if (
+            any(pattern.search(text) for pattern in IMPERATIVE_PATTERNS)
+            or directive_hits >= DIRECTIVE_SIGNAL_MINIMUM
+        ):
             vector[OC_IMPERATIVE] = 1.0
         if XML_TAG_RE.search(text):
             vector[OC_XML_TAGS] = 1.0
@@ -607,6 +682,19 @@ class FeatureExtractor:
         for candidate in candidates:
             if len(candidate) >= MIN_CHAIN_TOKEN_LEN:
                 self.state.output_tokens.append((candidate, category))
+
+        # Entities the response *names* are chainable wherever they sit inside it.
+        # Remembering only whole leaves misses the exfiltration shape entirely: a
+        # short identifier lifted out of a long document. The leaf exceeds
+        # CHAIN_WINDOW, so matching falls to the sliding window, and every window
+        # carries a neighbouring source character the destination argument does
+        # not have -- so a 23-character IBAN inside a bill could never match.
+        #
+        # destination_tokens already extracts exactly these entities -- contacts,
+        # IBANs, cards, URL hosts -- and is what puts them in
+        # attested_destinations, so it is reused rather than reimplemented.
+        for token in destination_tokens(response_text, self.scorer):
+            self.state.output_tokens.append((token, category))
 
     def _remember_identifiers(
         self, payload: Any, key: str | None = None, *, category: ToolCategory = ToolCategory.READ
