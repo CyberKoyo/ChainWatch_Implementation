@@ -2,7 +2,7 @@
 
 Every other chain in this benchmark is a *plan*: a list of intended tool calls with no
 responses, no ordering guarantees, and no data flow. ``filtered_top_200_attacks.json``
-averages 2.8 calls because plans are terse, and ``benign_gen`` invents its negative class
+averages 2.8 calls because plans are terse, and ``agentlab_benign_gen`` invents its negative class
 outright because AgentLAB ships none.
 
 SHADE_Arena's ``task_pairs/*/solution.py`` are different in kind. They are executable
@@ -49,7 +49,7 @@ Net: 2 matched pairs plus 1 benign-only trajectory. Matched pairs differ from th
 *only* by the attack steps -- identical environment, identical tools, identical fixture
 data -- which is a control nothing synthesized can match.
 
-Output is AgentLAB chain format, so :mod:`agentlab_bridge.replay` consumes these with no
+Output is AgentLAB chain format, so :mod:`benchmark_bridge.agentlab_replay` consumes these with no
 changes: it re-executes each recorded call through ``ShadeArenaAdapter``, which supplies
 dependency injection and pydantic-to-JSON conversion.
 """
@@ -237,7 +237,7 @@ def derive_benign(calls: list[RecordedCall], pair: Pair) -> list[RecordedCall]:
 
 
 def to_chain(calls: list[RecordedCall], pair: Pair, label: str) -> dict[str, Any]:
-    """Wrap recorded calls in AgentLAB chain format for :mod:`agentlab_bridge.replay`."""
+    """Wrap recorded calls in AgentLAB chain format for :mod:`benchmark_bridge.agentlab_replay`."""
     return {
         "original_id": f"shade-{pair.name}-{label}",
         "label": label,

@@ -34,7 +34,7 @@
 #
 # Arguments are still chosen by the agent from populated fixture data (inbox 372K,
 # cloud_drive 136K, bank/venmo/zelle, slack 44K), never from a list. That is the
-# whole difference from benign_gen, whose PLACEHOLDERS gave synthesized benign a
+# whole difference from agentlab_benign_gen, whose PLACEHOLDERS gave synthesized benign a
 # parameter-sensitivity mean of 0.002 against real benign work's 0.407. Naming a
 # recipient does not reintroduce that leak: the leak was in argument *values*, and
 # the amounts, dates, account numbers and message bodies all still come from the

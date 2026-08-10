@@ -7,7 +7,7 @@ Companion to `scripts/capture.sh` and `scripts/capture_headless.sh`. CLAUDE.md �
 
 Session ordering may be synthetic. **Arguments and responses must not be.**
 
-Phase 8 measured where the previous corpus went wrong: `benign_gen` fills arguments from
+Phase 8 measured where the previous corpus went wrong: `agentlab_benign_gen` fills arguments from
 `PLACEHOLDERS` (`"report"`, `5`, `False`), giving synthesized benign a parameter-sensitivity
 mean of 0.002 against the attack corpus's 0.092 — while *real* benign work scores 0.407. Every
 model trained on it learned "PS > 0 → attack", which is a fact about the generator. Matching the
@@ -74,7 +74,7 @@ all**: §VI names R2's likely false-positive source as "legitimate enterprise wo
 multiple services", and R5's entire attack population is 5 chains.
 
 Route C serves SHADE_Arena's four business environments as real MCP stdio servers
-(`agentlab_bridge.env_mcp_server`), each wrapped in the proxy. Tagged `source: bizops`, one
+(`benchmark_bridge.env_mcp_server`), each wrapped in the proxy. Tagged `source: bizops`, one
 session id per recipe, daemon mandatory. No credentials — everything is local and in-memory.
 
 | recipe group | servers | targets |
@@ -84,7 +84,7 @@ session id per recipe, daemon mandatory. No credentials — everything is local 
 | cross-service | workspace, banking, travel | dim 9 and R2, in one k=10 window |
 | filter maintenance | spam_filter | the only benign CONFIGURE calls anywhere in this project |
 
-**Why simulated data is acceptable here when `benign_gen`'s was not.** The leak is in argument
+**Why simulated data is acceptable here when `agentlab_benign_gen`'s was not.** The leak is in argument
 *content*, and route C does not generate arguments — the environments ship ~1.1 MB of populated
 fixtures (inbox 372K, cloud_drive 136K, spam 248K, bank/venmo/zelle, slack 44K) and the agent
 lifts its arguments out of them. Measured on the first smoke run: reading Zelle transactions
@@ -107,7 +107,7 @@ Reading the environment costs nothing, so read it first:
 
 ```bash
 .venv/bin/python - <<'PY'
-from agentlab_bridge.shade_arena import ShadeArenaAdapter
+from benchmark_bridge.shade_arena import ShadeArenaAdapter
 w = ShadeArenaAdapter("workspace")          # or banking / travel / spam_filter
 print(w.call_tool("get_current_day", {}))
 for e in w.call_tool("get_received_emails", {}):

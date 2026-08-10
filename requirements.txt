@@ -5,7 +5,7 @@ pyyaml>=6.0
 # Test suite.
 pytest>=8.0
 
-# AgentLAB replay harness only (agentlab_bridge/). Not needed to run ChainWatch
+# Legacy benchmark replay only (benchmark_bridge/). Not needed to run ChainWatch
 # in front of a real MCP server.
 #   pydantic[email]  -- SHADE_Arena environments are pydantic models
 #   docstring_parser -- its functions_runtime parses tool docstrings

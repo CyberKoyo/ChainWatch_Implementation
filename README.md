@@ -136,12 +136,12 @@ chainwatch/
   models/prior.json    serialized priors
   cli.py               proxy | daemon | check | train | replay | eval | capture
 
-agentlab_bridge/       turns the AgentLAB benchmark into live MCP traffic
+benchmark_bridge/      bridges the vendored AgentLAB, SHADE, and SafetyBench data
   safetybench.py       Agent_SafetyBench adapter (BaseEnv subclass + paired .json schema)
   shade_arena.py       SHADE_Arena adapter (167 of the 200 chains)
   env_mcp_server.py    exposes an environment as a real MCP stdio server
-  replay.py            drives 200 verified attack chains through the full stack
-  benign_gen.py        synthesizes a matched benign negative class
+  agentlab_replay.py   drives 200 verified AgentLAB attack chains through the full stack
+  agentlab_benign_gen.py synthesizes the legacy matched benign negative class
 
 tests/
   test_scenarios.py    the paper's five §V-B scenarios — the conformance gate
@@ -193,7 +193,7 @@ Wrap a real server (ChainWatch inside mcpwall):
 
 ```bash
 .venv/bin/python -m chainwatch daemon        # cross-server state; needed for R2
-.venv/bin/python -m agentlab_bridge.replay --all
+.venv/bin/python -m benchmark_bridge.agentlab_replay --all
 .venv/bin/python -m chainwatch train --traces ~/.chainwatch/traces/*.jsonl --iters 50
 ```
 

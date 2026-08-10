@@ -15,7 +15,7 @@ single low-risk write, **never chaining a read's output into an outbound call**.
 That last clause is R3's entire signature. Excluding it from the negative class made
 a 0.0% false-positive rate a mathematical certainty rather than a measurement.
 
-Extracting real trajectories (:mod:`agentlab_bridge.shade_solutions`) showed what
+Extracting real trajectories (:mod:`benchmark_bridge.shade_solutions`) showed what
 that concealed: ordinary assistant work chains reads into outbound calls constantly
 -- search the drive, then email what you found -- and ChainWatch blocks it. One of
 three real benign trajectories is blocked outright, and on both matched attack/benign
@@ -74,7 +74,7 @@ EXCLUDED = {"end_task"}
 CONTENT_KEYS = ("body", "content", "message", "text", "description", "summary", "note")
 
 #: Substituted at replay time with the previous response. Must match
-#: ``replay.ResponseBinder.CARRY``; duplicated rather than imported because this
+#: ``agentlab_replay.ResponseBinder.CARRY``; duplicated rather than imported because this
 #: module is also used to build chains offline, without the replay harness.
 CARRY = "{{PRIOR_OUTPUT}}"
 

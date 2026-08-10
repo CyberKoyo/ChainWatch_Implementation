@@ -5,7 +5,7 @@
 #
 # Drives `claude -p` once per recipe against SHADE_Arena's workspace, banking,
 # travel and spam_filter environments, each served as a real MCP stdio server by
-# agentlab_bridge.env_mcp_server and each wrapped in the chainwatch proxy.
+# benchmark_bridge.env_mcp_server and each wrapped in the chainwatch proxy.
 #
 # Why this exists. Routes A and B capture software engineering: files, repos,
 # docs. Nothing in either exercises payments, email, calendar or filter
@@ -13,8 +13,8 @@
 # source for "legitimate enterprise workflows spanning multiple services", and R5,
 # whose entire attack population is 5 chains, have never seen benign traffic.
 #
-# Why simulated data is acceptable here, when benign_gen's was not. The leak Phase
-# 8 measured is in argument *content*: benign_gen fills parameters from a list of
+# Why simulated data is acceptable here, when agentlab_benign_gen's was not. The leak Phase
+# 8 measured is in argument *content*: agentlab_benign_gen fills parameters from a list of
 # placeholders, so PS is 0.002 by construction. Here the environments ship ~1.1 MB
 # of populated fixtures and an agent picks the arguments out of them -- a real
 # invoice body, a real balance, a real contact. The generator chooses nothing.

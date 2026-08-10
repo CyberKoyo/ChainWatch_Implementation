@@ -10,7 +10,7 @@
 # Session *ordering* here is chosen by the task list. Arguments and responses are
 # not: every repo, query and path is real. That distinction is the whole point --
 # Phase 8 established the leak lives in argument content, so a generator that
-# invents parameter values reproduces `benign_gen` exactly.
+# invents parameter values reproduces `agentlab_benign_gen` exactly.
 #
 # Public repositories and public search only. Route A is where the operator's own
 # files are captured, and there `--log-args` stays off.

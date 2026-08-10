@@ -4,7 +4,7 @@ This is what turns the benchmark from a list of *plans* into live JSON-RPC
 traffic. Run underneath the proxy chain exactly as a real server would be:
 
     npx mcpwall -- python -m chainwatch -- \\
-        python -m agentlab_bridge.env_mcp_server --env banking
+        python -m benchmark_bridge.env_mcp_server --env banking
 
 Implements the subset of MCP the replay exercises: ``initialize``, ``tools/list``,
 ``tools/call``. That is deliberate -- this is an evaluation fixture, not a general
@@ -97,7 +97,7 @@ def _as_text(value: Any) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="agentlab_bridge.env_mcp_server")
+    parser = argparse.ArgumentParser(prog="benchmark_bridge.env_mcp_server")
     parser.add_argument("--env", required=True, help="environment name, e.g. banking")
     parser.add_argument("--family", default="auto", choices=["auto", "shade", "safetybench"])
     options = parser.parse_args(argv)

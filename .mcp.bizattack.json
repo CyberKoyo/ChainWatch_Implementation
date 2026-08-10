@@ -11,7 +11,7 @@
         "--log-args",
         "--",
         "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
-        "-m", "agentlab_bridge.env_mcp_server", "--env", "workspace"
+        "-m", "benchmark_bridge.env_mcp_server", "--env", "workspace"
       ]
     },
     "banking": {
@@ -25,7 +25,7 @@
         "--log-args",
         "--",
         "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
-        "-m", "agentlab_bridge.env_mcp_server", "--env", "banking"
+        "-m", "benchmark_bridge.env_mcp_server", "--env", "banking"
       ]
     },
     "travel": {
@@ -39,7 +39,7 @@
         "--log-args",
         "--",
         "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
-        "-m", "agentlab_bridge.env_mcp_server", "--env", "travel"
+        "-m", "benchmark_bridge.env_mcp_server", "--env", "travel"
       ]
     },
     "spam_filter": {
@@ -53,7 +53,7 @@
         "--log-args",
         "--",
         "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
-        "-m", "agentlab_bridge.env_mcp_server", "--env", "spam_filter"
+        "-m", "benchmark_bridge.env_mcp_server", "--env", "spam_filter"
       ]
     }
   }

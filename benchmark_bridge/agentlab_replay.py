@@ -3,7 +3,7 @@
 This closes the gap the paper concedes in section V-A -- "testing ChainWatch
 properly requires labelled session traces where benign-looking calls build toward
 an attack, data that no existing benchmark provides". AgentLAB supplies 200
-*verified* attack chains, and :mod:`benign_gen` supplies a matched negative class.
+*verified* attack chains, and :mod:`agentlab_benign_gen` supplies a matched negative class.
 
 The chains are plans, not traces: no responses, no timings, no server attribution.
 Executing them against the real environment simulators is what makes the Temporal
@@ -90,7 +90,7 @@ class ChainResult:
     calls: int
     #: Which corpus this came from. Reported separately and never averaged: the
     #: SHADE trajectories are real agent behaviour, the AgentLAB chains are plans,
-    #: and the benign_gen output is synthesized. Pooling them would let the largest
+    #: and the agentlab_benign_gen output is synthesized. Pooling them would let the largest
     #: and weakest population set the headline number.
     source: str = "agentlab"
     stages: list[int] = field(default_factory=list)
@@ -363,7 +363,7 @@ def build_benign_chains(
     ``profile`` selects which benign population to build; ``None`` means REALISM,
     the one false-positive numbers are quoted from.
     """
-    from .benign_gen import REALISM, generate
+    from .agentlab_benign_gen import REALISM, generate
 
     profile = profile or REALISM
     attack_chains = list(attack_chains)
@@ -509,9 +509,9 @@ def print_shade_report(results: list[ChainResult]) -> None:
             f"\n  benign trajectories: {detected}/{len(benign)} raise WARNING+, "
             f"{blocked}/{len(benign)} blocked"
         )
-        print("  Compare against the 0.0% false positives measured on synthesized benign.")
-        print("  benign_gen never chains a read's output into an outbound call, which is")
-        print("  precisely R3's signature -- so that 0.0% was guaranteed by construction.")
+        print("  Report these real trajectories separately from synthesized benign.")
+        print("  They exposed why the original 0.0% result was structural; the current")
+        print("  agentlab_benign_gen realism population now includes chained outbound flow.")
     print()
 
 
@@ -557,7 +557,7 @@ def write_traces(results: list[ChainResult], path: Path) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="agentlab_bridge.replay")
+    parser = argparse.ArgumentParser(prog="benchmark_bridge.agentlab_replay")
     parser.add_argument("--limit", type=int, default=None, help="replay only the first N chains")
     parser.add_argument("--all", action="store_true", help="replay all 200 chains")
     parser.add_argument("--no-benign", action="store_true", help="skip the negative class")
@@ -596,7 +596,7 @@ def main(argv: list[str] | None = None) -> int:
     benign_results: list[ChainResult] = []
     control_results: list[ChainResult] = []
     if not options.no_benign:
-        from .benign_gen import REALISM, control_profile
+        from .agentlab_benign_gen import REALISM, control_profile
 
         benign_chains = build_benign_chains(attack_chains, seed=options.seed, profile=REALISM)
         print(f"replaying {len(benign_chains)} benign chains (realism)...", flush=True)

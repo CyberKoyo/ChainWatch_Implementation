@@ -391,23 +391,23 @@ BENIGN_RECONCILIATION = [
 ]
 
 
-def test_attested_recipient_still_blocks_under_the_paper_default():
-    """RuleConfig defaults to the section IV-D reading, which knows no recipients."""
+def test_attested_recipient_downgrades_under_the_operational_default():
+    """The operational default warns on trusted data flow without blocking it."""
     trace = run_scenario(BENIGN_RECONCILIATION, server="banking")
-    assert trace.severity is Severity.CRITICAL
-    assert trace.blocked_at == 3
+    assert trace.blocked_at is None
+    assert ("R3", 3) in trace.fired
+    assert trace.severity is Severity.WARNING
 
 
-def test_attested_recipient_downgrades_r3():
-    """The address came out of the ledger, so the payment is not exfiltration."""
+def test_attested_recipient_still_blocks_under_explicit_paper_policy():
+    """The section IV-D reading remains reachable by explicit configuration."""
     trace = run_scenario(
         BENIGN_RECONCILIATION,
         server="banking",
-        config=RuleConfig(r3_attested_action="downgrade"),
+        config=RuleConfig(r3_attested_action="ignore"),
     )
-    assert trace.blocked_at is None, "a payment to an address the ledger named must not block"
-    assert ("R3", 3) in trace.fired, "the alert is downgraded, not silenced"
-    assert trace.severity is not Severity.CRITICAL
+    assert trace.severity is Severity.CRITICAL
+    assert trace.blocked_at == 3
 
 
 def test_attested_recipient_can_be_suppressed_entirely():

@@ -2,7 +2,7 @@
 
 AgentDojo (Debenedetti et al., NeurIPS 2024 D&B) is vendored at ``./agentdojo`` and
 installed editable into the venv. It is imported *only* from ``agentdojo_bridge/``,
-the same isolation ``agentlab_bridge/`` has for SHADE — ``chainwatch/engine/`` stays
+the same isolation ``benchmark_bridge/`` has for SHADE — ``chainwatch/engine/`` stays
 numpy-only.
 """
 
@@ -35,8 +35,8 @@ def test_adapter_lists_and_calls_tools_on_clean_env():
 
 
 def test_adapter_is_an_envadapter():
-    """The bridge must satisfy the same Protocol agentlab_bridge's servers do."""
-    from agentlab_bridge.base import EnvAdapter
+    """The bridge must satisfy the same Protocol benchmark_bridge's servers do."""
+    from benchmark_bridge.base import EnvAdapter
 
     from agentdojo_bridge.adapter import AgentDojoAdapter
 

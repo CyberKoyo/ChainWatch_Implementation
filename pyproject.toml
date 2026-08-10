@@ -36,7 +36,7 @@ agentdojo = ["agentdojo"]
 chainwatch = "chainwatch.cli:main"
 
 [tool.setuptools]
-packages = ["chainwatch", "chainwatch.engine", "chainwatch.proxy", "chainwatch.daemon", "chainwatch.ml", "chainwatch.capture", "agentlab_bridge"]
+packages = ["chainwatch", "chainwatch.engine", "chainwatch.proxy", "chainwatch.daemon", "chainwatch.ml", "chainwatch.capture", "benchmark_bridge"]
 
 [tool.setuptools.package-data]
 chainwatch = ["models/*.json"]

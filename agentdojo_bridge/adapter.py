@@ -60,7 +60,7 @@ def to_jsonable(value: Any) -> Any:
     Python repr rather than JSON, which no MCP client can parse and which destroys
     every structural signal downstream -- ``df_chained`` went to 0 across the whole
     benchmark last time. Route E carries its own copy rather than importing
-    ``agentlab_bridge.shade_arena``, so it takes no dependency on a retired route.
+    ``benchmark_bridge.shade_arena``, so it takes no dependency on a retired route.
     """
     if hasattr(value, "model_dump"):
         try:

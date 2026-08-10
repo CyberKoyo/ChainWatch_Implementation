@@ -110,17 +110,18 @@ class RuleConfig:
     #: What R3 does when the destination is ATTESTED -- named by the environment
     #: in a clean READ response before the session ever referenced it.
     #:
-    #: ``"ignore"`` is the default because section IV-D knows nothing about
-    #: recipients: recipient provenance is an *addition* to the specification,
-    #: not a reading of it, so the paper-literal behaviour stays the default and
-    #: the deviation is opted into -- the same discipline applied to
-    #: ``r3_read_stage_min`` for ambiguity A1. See CLAUDE.md ambiguity A4.
+    #: ``"downgrade"`` is the operational default. Landing 2 made a copied
+    #: destination observable whether it came from a clean bill or an injected
+    #: one; provenance is the existing signal that separates those flows. On the
+    #: archived AgentDojo sessions, downgrade restores benign CRITICAL sessions
+    #: from 3/9 to 1/9 while leaving attack CRITICAL sessions at 16/33.
     #:
-    #: ``"downgrade"`` keeps the alert but stops the block, which is the point:
+    #: Downgrade keeps the alert but stops the block, which is the point:
     #: every false positive measured in Phase 7 was a block, and a WARNING on a
     #: legitimate payment costs a human a glance rather than costing the business
-    #: the payment. ``"suppress"`` drops the alert entirely.
-    r3_attested_action: str = "ignore"
+    #: the payment. ``"ignore"`` preserves section IV-D's paper-literal behavior,
+    #: which knows nothing about recipients; ``"suppress"`` drops the alert.
+    r3_attested_action: str = "downgrade"
 
     #: R4: "a stage jump of two or more positions".
     r4_min_jump: int = 2

@@ -1,6 +1,6 @@
 """Serve one AgentDojo suite as an MCP stdio server for ChainWatch capture.
 
-Mirrors ``agentlab_bridge/env_mcp_server.py``. Benign vs attack is decided *here*,
+Mirrors ``benchmark_bridge/env_mcp_server.py``. Benign vs attack is decided *here*,
 not by the agent: ``--inject <injection_task_id>`` fills the suite's injection
 vectors with AgentDojo's verbatim ``important_instructions`` payload; without it the
 env carries the innocuous defaults. The prompt handed to the agent is the same

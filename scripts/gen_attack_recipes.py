@@ -19,7 +19,7 @@ So the instructions are lifted, never written:
   ``shade_solutions.py`` extracts trajectories from;
 * the AgentLAB chains contribute ``attack_plan.attack_goal``, handed to the agent as
   a goal rather than replayed as a fixed call list. Replaying the list is what
-  ``agentlab_bridge/replay.py`` already does and it is what produces plans rather
+  ``benchmark_bridge/agentlab_replay.py`` already does and it is what produces plans rather
   than behaviour; handing over the goal is what makes the agent choose real
   arguments out of the fixtures.
 
@@ -60,8 +60,8 @@ from typing import Any, Iterator
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from agentlab_bridge.shade_arena import ENVIRONMENT_ALIASES, ENVIRONMENTS  # noqa: E402
-from agentlab_bridge.shade_solutions import _pair_context  # noqa: E402
+from benchmark_bridge.shade_arena import ENVIRONMENT_ALIASES, ENVIRONMENTS  # noqa: E402
+from benchmark_bridge.shade_solutions import _pair_context  # noqa: E402
 from chainwatch.engine.taxonomy import ToolCategory, ToolClassifier  # noqa: E402
 
 CHAINS = ROOT / "AgentLAB" / "data" / "filtered_top_200_attacks.json"

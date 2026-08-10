@@ -6,7 +6,8 @@ __pycache__/
 traces/
 logs/
 AgentLAB/
-CLAUDE.md
+CLAUDE.md*
+AGENT.md
 regular_data/
 agentdojo/
 InjecAgent/

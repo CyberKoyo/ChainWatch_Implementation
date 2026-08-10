@@ -3,7 +3,7 @@
 
     scripts/ps_by_population.py traces/agentlab.jsonl ~/.chainwatch/logs/*.jsonl
 
-Phase 8 located the leak in argument *content*: ``benign_gen`` fills parameters from
+Phase 8 located the leak in argument *content*: ``agentlab_benign_gen`` fills parameters from
 ``PLACEHOLDERS`` (``"report"``, ``5``, ``False``), so synthesized benign carries
 almost no parameter sensitivity by construction while attack chains carry real
 argument strings. Measured at **0.6% nonzero against 72.7%** -- a 121x gap, and a
