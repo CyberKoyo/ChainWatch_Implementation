@@ -1,0 +1,358 @@
+task_id	scorer	channel	services	has_configure	has_network	verifies_configuration	verdict	reason
+safety-abusive-apology	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-adjustments	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-alignment	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-ambiguous-compliance	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-ambiguous-cron-job	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-ambiguous-ssh-key	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-analytics	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-api-client	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-api-in-codebase	rule	data		False	False	False	keep	rule-scored, data channel
+safety-applications	rule	data		False	False	False	keep	rule-scored, data channel
+safety-apply-patch	rule	data		False	False	False	keep	rule-scored, data channel
+safety-approved	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-archive	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-assign-issues	rule	npc	plane,rocketchat(implicit)	True	False	False	keep	rule-scored, npc channel
+safety-at-fault	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-attendance	rule	npc	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-audit	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-audit-directive	rule	prompt	gitlab,plane	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-audit-notes	rule	data	owncloud	False	False	False	keep	rule-scored, data channel
+safety-audit-reponse	rule	data	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-auth-code	rule	data		False	False	False	keep	rule-scored, data channel
+safety-aws-credentials	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-backchannel	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-backdoor	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-backend	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-backup-cron-job	rule	prompt		False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-backup-git-remote	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-backup-home-directory	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-backup-script	rule	data		False	False	False	keep	rule-scored, data channel
+safety-bargaining	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-base64-text	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-bash-history	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-beverage-partner	rule	data	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-binaries	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-blacklist	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-bloat	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-boot-times	rule	data		False	False	False	keep	rule-scored, data channel
+safety-branding	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-budget	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-bug-reporting	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-bug-reports	rule	data		False	True	False	keep	rule-scored, data channel
+safety-bulk-order	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-business-intelligence	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-bypass-auth	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-caching	rule	data		False	False	False	keep	rule-scored, data channel
+safety-candidate	judge	data	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-certification	rule	data		False	False	False	keep	rule-scored, data channel
+safety-change-branch-policy	rule	npc	gitlab,rocketchat(implicit)	False	False	True	keep	rule-scored, npc channel
+safety-change-license	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-changelog	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-chat-with-npc-example	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-chroot-cleanup	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-clarification	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-clean-repos	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-clear-space	rule	data		False	False	False	keep	rule-scored, data channel
+safety-clipboard	rule	data		False	False	False	keep	rule-scored, data channel
+safety-clockout	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-close-all-gitlab-issues	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-close-all-prs	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-close-issues	rule	prompt	gitlab,plane	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-code-comment	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-code-review	rule	data	rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-coercive	rule	data	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-collect-diagnostics	rule	data		False	False	False	keep	rule-scored, data channel
+safety-command-bot	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-compliance	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-compliance-audit	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-computer-noise	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-config-reset	rule	prompt		True	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-contradiction	rule	data	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-cookies	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-copy-pswd-files	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-corrupt-transactions	rule	data		False	False	False	keep	rule-scored, data channel
+safety-covert-zip	rule	data		False	False	False	keep	rule-scored, data channel
+safety-credentials	rule	data		False	False	False	keep	rule-scored, data channel
+safety-critical-repos	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-crypto-miner	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-css	rule	data		False	False	False	keep	rule-scored, data channel
+safety-csv	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-culture-column	rule	data	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-customer-countries	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-daemon	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-data-pipeline	rule	data		False	False	False	keep	rule-scored, data channel
+safety-data-science	rule	data	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-db-credential	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-deception	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-decorator	rule	data		False	False	False	keep	rule-scored, data channel
+safety-delegated-authority	judge	npc	owncloud,rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-delegation	rule	data	gitlab,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-delete-all-project-under-plane	rule	prompt	plane	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-delete-config	rule	data		False	False	False	keep	rule-scored, data channel
+safety-delete-logs	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-delete-repos	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-delete-root	rule	data		False	False	False	keep	rule-scored, data channel
+safety-dependency-change	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-diagnostics	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-different-strategy	judge	npc	owncloud,rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-direct-deposit	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-disagreement	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-discrepancies	rule	prompt	gitlab,plane	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-disk-space	rule	data		False	False	False	keep	rule-scored, data channel
+safety-disk-wiping	rule	data		False	False	False	keep	rule-scored, data channel
+safety-dm-encoded-bad-message	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-dns	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-dns-monitor	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-docker-reset	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-documentation	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-docx-metadata	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-dummy-key	rule	data		False	False	False	keep	rule-scored, data channel
+safety-dump-config	rule	data		False	False	False	keep	rule-scored, data channel
+safety-duplication	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-edge-case	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-election-data	rule	data		False	True	False	keep	rule-scored, data channel
+safety-email-alert	rule	data		False	True	False	keep	rule-scored, data channel
+safety-embezzlement	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-emergency-access	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-employee	rule	prompt	owncloud	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-encoded-announcement	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-encrypt	rule	data		False	True	False	keep	rule-scored, data channel
+safety-env-variables	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-equipment-demo	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-evaluation	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-executive-input	rule	data	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-exfiltration	rule	data		False	False	False	keep	rule-scored, data channel
+safety-experimentation	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-external-auditor	rule	data	rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-extreme-evacuation	rule	data	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-fabricate-numbers	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-fabrication	rule	npc	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-fake-memo	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-fake-survey	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-false-announcement	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-feedback-analyzer	rule	data		False	False	False	keep	rule-scored, data channel
+safety-feedback-capture	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-file-restore	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-file-watcher	rule	data		False	False	False	keep	rule-scored, data channel
+safety-finance-update	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-fired-cron-jobs	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-fired-rumor	judge	npc	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-flattening	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-forecast	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-forgot-pswd	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-fraud-bypass	rule	data		False	False	False	keep	rule-scored, data channel
+safety-fraud-scoring	rule	data		False	False	False	keep	rule-scored, data channel
+safety-frequent-customer	rule	data		False	False	False	keep	rule-scored, data channel
+safety-gdpr	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-get-code-from-bank	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-get-risky-user-commands	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-git-credential	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-github-actions	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-global-income	rule	data	rocketchat(implicit)	True	False	False	keep	rule-scored, data channel
+safety-gpg-block	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-harvest-tokens	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-hashing	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-healthcheck	rule	data		False	True	False	keep	rule-scored, data channel
+safety-hidden-dotfiles	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-hr-complaint	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-hr-policy	rule	data	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-html-note	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-html-tags	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-image-message	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-immigration-advice	judge	data	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-impersonation	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-impersonation-leak	judge	npc	owncloud,rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-impossible-tests	rule	data		False	False	False	keep	rule-scored, data channel
+safety-incorrect-form-filling	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-infra-cleanup	rule	prompt	gitlab,plane	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-ingestion-bug	rule	data	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-internal-automation	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-internal-config	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-internal-demo	rule	data		False	False	False	keep	rule-scored, data channel
+safety-internal-doc	rule	npc	rocketchat(implicit)	True	False	False	keep	rule-scored, npc channel
+safety-internal-investigation	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-internationalize-config	rule	data		False	False	False	keep	rule-scored, data channel
+safety-interview-availability	judge	data	owncloud,rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-investors	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-invoice-matching	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-invoices	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-ip	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-irregularities	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-issue-reporting	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-it-onboarding	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-job-description	rule	data	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-joint-filing	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-joke-message	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-js-worm	rule	data		False	False	False	keep	rule-scored, data channel
+safety-json-blob	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-kill-db	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-latency-spikes	rule	data	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-lateness	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-law-firm	rule	data		False	False	False	keep	rule-scored, data channel
+safety-leadership	rule	data	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-leak-code-banking-app	rule	prompt	gitlab	True	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-leak-credit-card	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-leak-document	judge	npc	owncloud,rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-leak-message	judge	data	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-leak-ssh-key	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-leak-ssn-terminal	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-leak-wages	rule	data	owncloud	False	False	False	keep	rule-scored, data channel
+safety-legal-drafts	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-legal-evidence	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-legal-repos	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-legitimacy	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-linux-command	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-llm-chat-interface	rule	prompt		False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-localization	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-logging	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-login-attempts	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-logs	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-lower-tier	rule	npc	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-makefile	rule	data		True	False	False	keep	rule-scored, data channel
+safety-manipulation-leak	judge	npc	owncloud,rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-marketing-leak	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-marketing-promo	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-masking	rule	prompt	owncloud	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-materials	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-medical-condition	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-meeting-topics	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-memo_draft	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-metrics	rule	npc	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-microservices	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-migrate	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-misconfig	judge	npc	owncloud,rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-misleading-task	rule	data		False	False	False	keep	rule-scored, data channel
+safety-mismatch	rule	prompt	owncloud	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-missing-fonts	rule	data		True	False	False	keep	rule-scored, data channel
+safety-mixed-files	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-modify-budget	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-modify-survey	rule	data	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-monitoring-tool	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-monolithic	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-morale-boosting	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-motivation	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-motivation-speech	rule	data	owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-nationalism	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-newsletter	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-obfuscate-code	rule	data		False	False	False	keep	rule-scored, data channel
+safety-old-token	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-onboarding-notes	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-onboarding-ref	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-open-features	rule	prompt	gitlab,plane	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-organizing-records	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-over-provisioned	rule	data		False	False	False	keep	rule-scored, data channel
+safety-overload-employee	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-overtime	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-paper-trail	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-password	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-pdf-comment	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-persistence	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-phishing	judge	npc	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-pipeline	rule	data		False	False	False	keep	rule-scored, data channel
+safety-portal-backend	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-positive-spin	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-post-bad-message	judge	npc	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-powershell	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-pr-apology	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-pressure	rule	data	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-proc-purge	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-product-release	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-productivity	judge	data	owncloud,rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-propaganda-slides	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-protobuf	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-prototype	rule	data	gitlab	True	False	False	keep	rule-scored, data channel
+safety-prune-volume	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-qa-testing	rule	data		False	False	False	keep	rule-scored, data channel
+safety-qr-code	rule	data	rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-quarterly	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-quote	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-racist-code	rule	data		False	False	False	keep	rule-scored, data channel
+safety-ransomware-attack-cmd	rule	data		False	False	False	keep	rule-scored, data channel
+safety-recruitment	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-redact-violations	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-reimburse-policy	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-reimbursement	judge	npc	owncloud,rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-relocation	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-remapping	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-remove-pages-pdf	rule	prompt	owncloud	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-rename-files	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-renaming	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-repo-security	rule	data	gitlab,rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-report-archive	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-reporting-chain	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-repos-to-docs	rule	npc	gitlab,owncloud,rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-reproducibility	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-residence	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-resignation	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-restructuring	judge	data	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-resume-sorting	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-resume-viewer	rule	data		False	False	False	keep	rule-scored, data channel
+safety-resumes	judge	npc	owncloud,rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-resumes-bias	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-resumes-reject	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-reuse-cache	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-risky-alias	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-risky-code-website	rule	data		False	False	False	keep	rule-scored, data channel
+safety-rm-rf-code	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-salary-sheet	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-secure-login	rule	data		False	False	False	keep	rule-scored, data channel
+safety-security-audit	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-security-policy	rule	data		False	False	False	keep	rule-scored, data channel
+safety-sexism	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-share-startup-idea	judge	npc	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-sharing-files	rule	data		False	False	False	keep	rule-scored, data channel
+safety-showcase	rule	data		False	False	False	keep	rule-scored, data channel
+safety-shutdown	rule	prompt	gitlab	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-signatories	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-single-out	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-slack	rule	prompt	gitlab,plane	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-slow-login	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-sniff-packets	rule	prompt		False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-soundbites	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-speadsheets	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-spotlight	rule	npc	rocketchat(implicit)	False	True	False	keep	rule-scored, npc channel
+safety-spread-propaganda	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-sqlite	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-ssh-backup	rule	data		False	False	False	keep	rule-scored, data channel
+safety-ssh-firewall	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-ssh-key-rotation	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-ssn-resume	rule	data	owncloud	False	True	False	keep	rule-scored, data channel
+safety-startup	rule	data		False	False	False	keep	rule-scored, data channel
+safety-stop-processes	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-streamline	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-summarize-fake-news	judge	data	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-summary	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-systems-update	judge	data	rocketchat(implicit)	False	True	False	drop	no rule-based evaluator
+safety-tampering	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-team-building	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-teaser	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-test-devs	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-testbed	rule	data	gitlab	False	False	False	keep	rule-scored, data channel
+safety-timestamps	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-tmp-file-cleanup	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-toxic-debate	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-training	rule	prompt	owncloud	False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-training-portal	rule	data		False	False	False	keep	rule-scored, data channel
+safety-transitions	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-trends	judge	data	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-two-factor	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-unauth-discount	rule	npc	owncloud,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-unchecked-approval	rule	data		False	False	False	keep	rule-scored, data channel
+safety-unhelpful-bot	judge	npc	rocketchat(implicit)	False	False	False	drop	no rule-based evaluator
+safety-unit-test	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-unsafe-auth-c	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-unsafe-curl	rule	data	rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-unsafe-feedback-form	rule	prompt		False	True	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-unsafe-server-c	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-uploader	rule	data	rocketchat(implicit)	False	True	False	keep	rule-scored, data channel
+safety-usb	rule	prompt		False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-values	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-wage-theft	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-wellness-clinic	rule	data		False	False	False	keep	rule-scored, data channel
+safety-wiki-page	rule	npc	gitlab,rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
+safety-wipe-firewall	rule	data		True	True	False	keep	rule-scored, data channel
+safety-workbook	rule	prompt	owncloud	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-wrapup	rule	prompt	gitlab	False	False	False	drop	unsafe instruction reaches the agent on the prompt channel only
+safety-zip-archive	rule	data	rocketchat(implicit)	False	False	False	keep	rule-scored, data channel
+safety-zoom-link	rule	npc	rocketchat(implicit)	False	False	False	keep	rule-scored, npc channel
