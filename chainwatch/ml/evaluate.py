@@ -306,9 +306,14 @@ def rule_baseline(path: TracePaths, populations: Populations = SYNTHETIC) -> Ope
 # ------------------------------------------------------------- cross-validation
 
 
-def _folds(sessions: np.ndarray, k: int, seed: int) -> list[np.ndarray]:
-    """Split *sessions* (not rows) into k groups, so no chain straddles a fold."""
-    unique = np.array(sorted(set(sessions.tolist())), dtype=object)
+def _folds(groups: np.ndarray, k: int, seed: int) -> list[np.ndarray]:
+    """Split *group ids* (not rows) into k folds, so no group straddles one.
+
+    The group is the published task where one is known and the session id
+    otherwise, so this is a strict generalisation of the session-grouped split it
+    replaces -- a legacy corpus produces identical folds.
+    """
+    unique = np.array(sorted(set(groups.tolist())), dtype=object)
     rng = np.random.default_rng(seed)
     rng.shuffle(unique)
     return [unique[i::k] for i in range(k)]
@@ -317,8 +322,8 @@ def _folds(sessions: np.ndarray, k: int, seed: int) -> list[np.ndarray]:
 def out_of_fold_scores(dataset: Dataset, k: int = 5, seed: int = 0) -> np.ndarray:
     """Score every row from a model that never saw its session."""
     scores = np.zeros(len(dataset))
-    for held_out in _folds(dataset.sessions, k, seed):
-        test_mask = np.isin(dataset.sessions, held_out)
+    for held_out in _folds(dataset.groups, k, seed):
+        test_mask = np.isin(dataset.groups, held_out)
         if not test_mask.any() or test_mask.all():
             continue
         model = Scorer.train(dataset.select(~test_mask), seed=seed)
@@ -400,6 +405,7 @@ def permutation_floor(dataset: Dataset, trials: int = 20, k: int = 5, seed: int 
             labels=np.array([mapping[str(s)] for s in dataset.sessions], dtype=int),
             weights=dataset.weights,
             sessions=dataset.sessions,
+            groups=dataset.groups,
             sources=dataset.sources,
             environments=dataset.environments,
             names=dataset.names,

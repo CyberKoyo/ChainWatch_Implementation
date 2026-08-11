@@ -94,6 +94,10 @@ class Dataset:
     labels: np.ndarray  # 1 = attack, 0 = benign
     weights: np.ndarray  # per-call fit weight
     sessions: np.ndarray  # session id, for grouped CV
+    #: Published task id where the manifest knows one, else the session id. A
+    #: benign AgentDojo task and its injected twin share this, which is what keeps
+    #: them in one fold; a legacy population falls back and folds as it always did.
+    groups: np.ndarray
     # agentlab / realism / control / shade / bizops / twin / agentdojo / injecagent.
     # Free-form on purpose: ``build(sources=...)`` is a whitelist the caller supplies,
     # so a new capture route needs a Populations entry in evaluate.py and nothing here.
@@ -111,6 +115,7 @@ class Dataset:
             labels=self.labels[mask],
             weights=self.weights[mask],
             sessions=self.sessions[mask],
+            groups=self.groups[mask],
             sources=self.sources[mask],
             environments=self.environments[mask],
             names=self.names,
@@ -282,6 +287,25 @@ def _rules(entry: dict[str, Any]) -> np.ndarray:
 # ---------------------------------------------------------------------------- build
 
 
+def _manifest_groups() -> dict[str, str]:
+    """Session id -> published fold group, from every manifest on disk.
+
+    Read once per :func:`build` rather than per row. A missing manifest is not an
+    error: it means this corpus predates the manifest, and the caller falls back
+    to the session id.
+    """
+    import os
+
+    from chainwatch.capture.manifest import read_entries
+
+    home = Path(os.environ.get("CHAINWATCH_HOME", Path.home() / ".chainwatch"))
+    mapping: dict[str, str] = {}
+    for path in sorted(home.glob("*_manifest.jsonl")):
+        for entry in read_entries(path):
+            mapping[entry.session] = entry.fold_group
+    return mapping
+
+
 def build(
     path: TracePaths,
     groups: Iterable[str] = GROUPS,
@@ -308,8 +332,10 @@ def build(
     labels: list[int] = []
     weights: list[float] = []
     session_ids: list[str] = []
+    group_ids: list[str] = []
     source_ids: list[str] = []
     environments: list[str] = []
+    manifest_groups = _manifest_groups()
 
     for calls in load_sessions(path):
         if keep is not None and str(calls[0].get("source")) not in keep:
@@ -344,7 +370,13 @@ def build(
             # Rises along the chain: an attack is visible at its payload, not at its
             # first reconnaissance call, yet both carry the same session label.
             weights.append(0.25 + 0.75 * ((index + 1) / len(calls)))
-            session_ids.append(str(entry.get("session")))
+            session_id = str(entry.get("session"))
+            session_ids.append(session_id)
+            # No manifest entry means a legacy population, where the session *is*
+            # the only grouping available. Falling back keeps every existing number
+            # in CLAUDE.md section 12 reproducible while the benchmark populations
+            # get the stronger grouping they need.
+            group_ids.append(manifest_groups.get(session_id, session_id))
             source_ids.append(str(entry.get("source")))
             # Replayed lines carry `environment`; live capture carries `server`
             # instead, and a bizops line has only the latter. Falling back keeps
@@ -370,7 +402,7 @@ def build(
         empty_object = np.empty(0, dtype=object)
         return Dataset(
             np.empty((0, len(names))), np.empty(0), np.empty(0),
-            empty_object, empty_object, empty_object, names,
+            empty_object, empty_object, empty_object, empty_object, names,
         )
 
     return Dataset(
@@ -378,6 +410,7 @@ def build(
         labels=np.array(labels, dtype=int),
         weights=np.array(weights, dtype=np.float64),
         sessions=np.array(session_ids, dtype=object),
+        groups=np.array(group_ids, dtype=object),
         sources=np.array(source_ids, dtype=object),
         environments=np.array(environments, dtype=object),
         names=names,

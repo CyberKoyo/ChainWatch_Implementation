@@ -489,3 +489,46 @@ def test_adding_injection_populations_left_the_existing_ones_alone():
     assert POPULATIONS["synthetic"].train == TRAIN_SOURCES
     assert POPULATIONS["real"].train == ("bizops", "bizattack")
     assert POPULATIONS["twins"].train == ("twin", "twinattack")
+
+
+def test_a_benign_task_and_its_injected_variant_never_cross_a_fold():
+    """Session-grouped CV looks equivalent to task-grouped and is not.
+
+    AgentDojo's benign user_task_0 and its injected twin share the user task, the
+    environment and most of the trajectory. Split across folds, the model is
+    tested on a task it was trained on -- the same species as win_occupancy, one
+    level up: a property of how the corpus was generated becoming a usable label.
+    """
+    from chainwatch.ml.evaluate import _folds
+
+    groups = np.array([
+        "agentdojo:banking:user_task_0", "agentdojo:banking:user_task_0",
+        "agentdojo:banking:user_task_1", "agentdojo:banking:user_task_1",
+        "agentdojo:slack:user_task_0", "agentdojo:slack:user_task_0",
+    ], dtype=object)
+    folds = _folds(groups, k=3, seed=0)
+    for fold in folds:
+        held = set(fold.tolist())
+        rest = {group for group in groups.tolist() if group not in held}
+        assert not (held & rest), f"group straddles a fold: {held & rest}"
+    assert sorted(g for fold in folds for g in fold.tolist()) == sorted(set(groups.tolist()))
+
+
+def test_a_session_with_no_manifest_entry_groups_on_its_own_id(tmp_path):
+    """Legacy populations must fold exactly as they did, or every number in
+    CLAUDE.md §12 stops being reproducible."""
+    from chainwatch.ml.dataset import build
+
+    trace = tmp_path / "legacy.jsonl"
+    trace.write_text("\n".join(
+        json.dumps({
+            "session": "legacy-1", "source": "realism", "label": "benign",
+            "call": index, "stage": 1, "severity": "NONE", "rules": [],
+            "v": [0.0] * 20,
+        })
+        for index in range(1, 4)
+    ) + "\n", encoding="utf-8")
+
+    dataset = build(trace, groups=("current",), sources=["realism"])
+    assert len(dataset) == 3
+    assert set(dataset.groups.tolist()) == set(dataset.sessions.tolist())
