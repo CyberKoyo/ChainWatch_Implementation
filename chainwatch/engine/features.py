@@ -198,7 +198,7 @@ DIRECTIVE_SIGNAL_MINIMUM = 2
 #: name already on the list -- which is how AgentDojo's ``<INFORMATION>`` passed
 #: all 27 of its injection tasks untouched while InjecAgent's ``enhanced``
 #: variant, which prepends the folk idiom, was caught 186 times out of 186.
-KNOWN_MARKUP_TAGS = frozenset(
+_HTML_TAGS = frozenset(
     """
     a abbr address article aside b blockquote body br button caption cite code col
     colgroup dd del details dfn div dl dt em fieldset figcaption figure footer form
@@ -209,23 +209,71 @@ KNOWN_MARKUP_TAGS = frozenset(
     """.split()
 )
 
+#: The serialisation vocabularies a *data* response is entitled to speak. This is
+#: not a name allowlist creeping back in: the test is still "markup the document
+#: formats do not define", and these formats define these. AgentDojo's
+#: ``<INFORMATION>`` is a wrapper somebody put around prose; ``<rss>``, ``<entry>``
+#: and ``<svg>`` are the document's own shape.
+_SERIALISATION_TAGS = frozenset(
+    """
+    atom author channel content description entry feed guid item link rss updated
+    circle defs ellipse g path polygon polyline rect svg tspan use
+    envelope fault soap rdf xml
+    """.split()
+)
+
+#: Tag names ordinary documents legitimately carry. Everything else in angle
+#: brackets is a wrapper somebody added, and a data response is not entitled to
+#: add wrappers.
+KNOWN_MARKUP_TAGS = _HTML_TAGS | _SERIALISATION_TAGS
+
 #: Matches a tag-shaped span; the name is then checked against the allowlist.
 #: A regex cannot express "not in this set" readably, so the split is deliberate.
-_TAG_SHAPE_RE = re.compile(r"</?\s*([A-Za-z][A-Za-z0-9_.:-]{0,40})\s*/?>")
+_TAG_SHAPE_RE = re.compile(r"(</?)\s*([A-Za-z][A-Za-z0-9_.:-]{0,40})\s*/?>")
 
 
 class _UnknownTagMatcher:
-    """Regex-compatible shim: ``.search(text)`` is truthy on an unknown tag.
+    """Regex-compatible shim: ``.search(text)`` is truthy on an unknown *wrapper*.
 
     Presented as a matcher rather than a bare function so the existing call sites
     keep working unchanged -- both ``_fill_output_characteristics`` and
     ``_attest_destinations`` already call ``XML_TAG_RE.search``.
+
+    **A wrapper wraps.** An unknown tag fires only when the same name appears as
+    both an opening and a closing tag, because that is what distinguishes a block
+    somebody wrapped around prose from the many other things angle brackets mean
+    in ordinary data:
+
+    * type parameters -- ``List<Integer>``, ``Vec<u8>``, ``Optional<str>``;
+    * command-line placeholders -- ``<msg>``, ``<sha>``, ``<branch>``;
+    * anything a shell or a README quotes.
+
+    None of those ever closes. Both published payload families do: AgentDojo's
+    ``<INFORMATION>...</INFORMATION>`` and section V-B's
+    ``<IMPORTANT>...</IMPORTANT>``.
+
+    The cost is stated rather than hidden: a *lone* unknown opening tag no longer
+    raises dim 14. An injected block written that way has to be caught by dim 13's
+    directive conjunction instead, which is the detector that does not depend on
+    markup at all. Enumerating placeholder names instead would have been the name
+    allowlist creeping back in through the other door -- and it was tried first:
+    a four-character floor killed ``<msg>`` and ``<sha>`` and left ``<branch>``.
     """
 
     @staticmethod
     def search(text: str) -> re.Match[str] | None:
-        for match in _TAG_SHAPE_RE.finditer(text):
-            if match.group(1).lower() not in KNOWN_MARKUP_TAGS:
+        matches = list(_TAG_SHAPE_RE.finditer(text))
+        closing = {m.group(2).lower() for m in matches if m.group(1) == "</"}
+        for match in matches:
+            name = match.group(2).lower()
+            if name in KNOWN_MARKUP_TAGS:
+                continue
+            # A closing tag is proof on its own -- nothing closes what was never
+            # opened, and neither a type parameter nor a shell placeholder ever
+            # produces one. Taking it alone also covers an opening tag carrying
+            # attributes, which the shape pattern does not match:
+            # `<INFORMATION type="x">...</INFORMATION>` is seen only by its close.
+            if match.group(1) == "</" or name in closing:
                 return match
         return None
 
