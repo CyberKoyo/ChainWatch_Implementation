@@ -32,11 +32,36 @@ def sha256_of(path: Path) -> str:
     return digest.hexdigest()
 
 
-def plan_archive(state: Path, *, sources: tuple[str, ...], stamp: str) -> list[dict]:
-    """Every artifact belonging to these sources, with its destination. Moves nothing."""
+#: Prefix every archived generation shares, and the default generation label.
+#: ``pre-v2`` is the default only because it preserves the behaviour that produced the
+#: existing archive; it is not a description of whatever is being archived now.
+ARCHIVE_PREFIX = "gpt-grid-"
+DEFAULT_GENERATION = "pre-v2"
+
+
+def archive_root_for(state: Path, *, generation: str, stamp: str) -> Path:
+    """Where one capture generation lives once archived."""
+    return Path(state) / ARCHIVE_DIRNAME / f"{ARCHIVE_PREFIX}{generation}-{stamp}"
+
+
+def plan_archive(
+    state: Path,
+    *,
+    sources: tuple[str, ...],
+    stamp: str,
+    generation: str = DEFAULT_GENERATION,
+) -> list[dict]:
+    """Every artifact belonging to these sources, with its destination. Moves nothing.
+
+    ``generation`` names what is being archived. It used to be hardcoded ``pre-v2``, so
+    only the *date* distinguished one archived generation from the next -- and archiving
+    a second generation on the same day merged it into the first, under a label
+    asserting it was the first. Note 31's species: a name that asserts a property
+    instead of deriving it. Two corpora that must never pool, pooled by a format string.
+    """
     state = Path(state)
     archive_root = state / ARCHIVE_DIRNAME
-    destination_root = archive_root / f"gpt-grid-pre-v2-{stamp}"
+    destination_root = archive_root_for(state, generation=generation, stamp=stamp)
     plan: list[dict] = []
     for source in sources:
         for subdir in SUBDIRS:
@@ -50,7 +75,16 @@ def plan_archive(state: Path, *, sources: tuple[str, ...], stamp: str) -> list[d
         # The aggregates sit at the top of the state dir, not in a subdir. The
         # `archive/` guard is what stops a second pass from re-archiving the
         # first pass's own output, since the destination lives under `state`.
-        for path in sorted(state.glob(f"{source}_*-*.jsonl")):
+        #
+        # `{source}_manifest.jsonl` is matched explicitly because it carries no run
+        # stamp, so the `_*-*` aggregate pattern misses it. Leaving it behind was a
+        # defect in two directions at once: the archive lost the only record of which
+        # published coordinate each archived session occupied, and the *live* tree kept
+        # a manifest describing sessions that are no longer there -- enough to abort the
+        # next capture on a duplicate coordinate belonging to an archived generation.
+        for path in sorted(
+            {*state.glob(f"{source}_*-*.jsonl"), *state.glob(f"{source}_manifest.jsonl")}
+        ):
             if archive_root in path.parents:
                 continue
             plan.append({
@@ -74,7 +108,7 @@ def apply_archive(plan: list[dict]) -> Path:
             raise SystemExit(1)
 
     root = Path(plan[0]["archived"]).parent
-    while root.parent != root and not root.name.startswith("gpt-grid-pre-v2-"):
+    while root.parent != root and not root.name.startswith(ARCHIVE_PREFIX):
         root = root.parent
     manifest_path = root / "archive_manifest.jsonl"
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
@@ -102,17 +136,48 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--state-dir", type=Path, default=Path.home() / ".chainwatch")
     parser.add_argument("--source", action="append", required=True)
     parser.add_argument("--stamp", default=None, help="archive date stamp; defaults to today UTC")
+    parser.add_argument(
+        "--generation",
+        default=DEFAULT_GENERATION,
+        help=f"which capture generation this is, e.g. pre-v3 (default: {DEFAULT_GENERATION})",
+    )
+    parser.add_argument(
+        "--append-generation",
+        action="store_true",
+        help="allow --apply into a generation directory that already exists; needed to "
+             "archive a second source into the same generation, and refused otherwise "
+             "so a second generation cannot land in the first one's directory",
+    )
     parser.add_argument("--apply", action="store_true", help="perform the move (default: dry run)")
     options = parser.parse_args(argv)
 
     stamp = options.stamp or datetime.datetime.now(datetime.UTC).strftime("%Y%m%d")
-    plan = plan_archive(options.state_dir, sources=tuple(options.source), stamp=stamp)
+    destination_root = archive_root_for(
+        options.state_dir, generation=options.generation, stamp=stamp
+    )
+    plan = plan_archive(
+        options.state_dir,
+        sources=tuple(options.source),
+        stamp=stamp,
+        generation=options.generation,
+    )
     for item in plan:
         print(f"{'MOVE' if options.apply else 'PLAN'} {item['original']} -> {item['archived']}")
-    print(f"{len(plan)} artifact(s)", file=sys.stderr)
+    print(f"{len(plan)} artifact(s) -> {destination_root}", file=sys.stderr)
     if not options.apply:
         print("dry run; nothing moved. Re-run with --apply", file=sys.stderr)
         return 0
+    # Per-file collision checks cannot catch this: a later generation's run ids differ
+    # from the earlier one's, so every filename is free and the two corpora merge
+    # silently into one directory sharing one manifest.
+    if destination_root.exists() and not options.append_generation:
+        print(
+            f"generation directory already exists: {destination_root}\n"
+            "Pass --generation <label> for a new generation, or --append-generation to "
+            "add another source to this one.",
+            file=sys.stderr,
+        )
+        return 3
     manifest_path = apply_archive(plan)
     print(f"archived, manifest at {manifest_path}", file=sys.stderr)
     return 0

@@ -73,3 +73,72 @@ def test_the_archive_is_not_re_archived(tmp_path):
         archiver.plan_archive(state, sources=("agentdojo-gpt4omini",), stamp="20260810"))
     assert archiver.plan_archive(state, sources=("agentdojo-gpt4omini",),
                                  stamp="20260811") == []
+
+
+
+def _seed_again(state: Path, name: str) -> Path:
+    """Another capture generation's artifact, in the same state dir."""
+    (state / "logs").mkdir(parents=True, exist_ok=True)
+    trace = state / "logs" / f"agentdojo-gpt4omini-{name}-001.jsonl"
+    trace.write_text('{"session":"x","v":[]}\n', encoding="utf-8")
+    return trace
+
+
+def test_two_generations_on_one_day_do_not_share_a_directory(tmp_path):
+    """The defect this guard exists for: the destination used to vary only by date, so
+    archiving v2 on the same day as pre-v2 merged both into one directory under a label
+    asserting it was the first -- two corpora that must never pool, pooled by a format
+    string. Per-file collision checks cannot catch it: the run ids differ, so every
+    filename is free."""
+    state = tmp_path / "state"
+    _seed(state)
+
+    first = archiver.plan_archive(state, sources=("agentdojo-gpt4omini",), stamp="20260810")
+    second = archiver.plan_archive(
+        state, sources=("agentdojo-gpt4omini",), stamp="20260810", generation="pre-v3"
+    )
+
+    assert {item["archived"] for item in first}.isdisjoint(
+        item["archived"] for item in second
+    )
+    assert all("gpt-grid-pre-v3-20260810" in item["archived"] for item in second)
+
+
+def test_apply_refuses_a_generation_directory_that_already_exists(tmp_path, capsys):
+    """A second --apply into an existing generation has to say so out loud."""
+    state = tmp_path / "state"
+    _seed(state)
+    argv = ["--state-dir", str(state), "--source", "agentdojo-gpt4omini",
+            "--stamp", "20260810", "--apply"]
+    assert archiver.main(argv) == 0
+
+    _seed_again(state, "second")
+    assert archiver.main(argv) == 3
+    assert "generation directory already exists" in capsys.readouterr().err
+
+    # still archivable under its own label ...
+    assert archiver.main(argv[:-1] + ["--generation", "pre-v3", "--apply"]) == 0
+    # ... and a second source may still join an existing generation, said explicitly
+    _seed_again(state, "third")
+    assert archiver.main(argv + ["--append-generation"]) == 0
+
+
+def test_the_corpus_manifest_is_archived_with_its_generation(tmp_path):
+    """It carries no run stamp, so the `_*-*` aggregate pattern missed it.
+
+    Leaving it behind broke the archive in two directions: the archive lost the only
+    record of which published coordinate each archived session occupied, and the live
+    tree kept a manifest describing sessions that were gone -- enough for
+    `assert_no_duplicates` to abort the next capture over a duplicate belonging to an
+    archived generation.
+    """
+    state = tmp_path / "state"
+    _seed(state)
+    manifest = state / "agentdojo-gpt4omini_manifest.jsonl"
+    manifest.write_text('{"session":"agentdojo-gpt4omini-x-001"}\n', encoding="utf-8")
+
+    plan = archiver.plan_archive(state, sources=("agentdojo-gpt4omini",), stamp="20260810")
+    assert any(item["original"] == str(manifest) for item in plan)
+
+    archiver.apply_archive(plan)
+    assert not manifest.exists(), "the live tree must not keep an archived generation's manifest"
