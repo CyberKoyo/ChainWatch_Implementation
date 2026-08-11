@@ -314,6 +314,14 @@ class SessionState:
     identifier_tokens: Deque[tuple[str, ToolCategory]] = field(
         default_factory=lambda: deque(maxlen=MAX_CHAIN_TOKENS)
     )
+    #: Entities a response *named* -- contacts, IBANs, cards, URL hosts. Kept
+    #: apart from ``output_tokens`` because they are matched differently: a host
+    #: can be five characters, so the bare containment test that store uses fires
+    #: on any word that happens to contain it. Boundary matching is what makes a
+    #: short entity chainable without being promiscuous.
+    destination_echoes: Deque[tuple[str, ToolCategory]] = field(
+        default_factory=lambda: deque(maxlen=MAX_CHAIN_TOKENS)
+    )
     tool_definition_hashes: dict[str, str] = field(default_factory=dict)
     response_sizes: dict[str, list[int]] = field(default_factory=dict)
     #: Tool names whose definition hash changed mid-session -- the rug-pull signal.
@@ -654,6 +662,13 @@ class FeatureExtractor:
         for token, category in self.state.identifier_tokens:
             if re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])", argument_text):
                 return category
+        # Destinations echo the identifier rule, not the output-token rule: match
+        # the whole entity or nothing. A URL reduces to its host, so "x.com" is
+        # five characters -- inside "box.combo" that is a coincidence, standing
+        # alone it is the datum leaving.
+        for token, category in self.state.destination_echoes:
+            if re.search(rf"(?<![A-Za-z0-9]){re.escape(token)}(?![A-Za-z0-9])", argument_text):
+                return category
         return None
 
     def _remember_output_tokens(self, response_text: str, category: ToolCategory) -> None:
@@ -694,7 +709,7 @@ class FeatureExtractor:
         # IBANs, cards, URL hosts -- and is what puts them in
         # attested_destinations, so it is reused rather than reimplemented.
         for token in destination_tokens(response_text, self.scorer):
-            self.state.output_tokens.append((token, category))
+            self.state.destination_echoes.append((token, category))
 
     def _remember_identifiers(
         self, payload: Any, key: str | None = None, *, category: ToolCategory = ToolCategory.READ

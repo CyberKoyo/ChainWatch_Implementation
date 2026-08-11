@@ -838,3 +838,25 @@ def test_chaining_a_short_entity_records_the_category_that_produced_it():
         ObservedCall("send_money", {"recipient": "US133000000121212121212"}, "s", 1002.0)
     )
     assert extractor.last_chain_source is ToolCategory.READ
+
+
+def test_a_short_destination_token_does_not_match_inside_an_unrelated_word():
+    """Landing 2's tokens skipped MIN_CHAIN_TOKEN_LEN and matched by bare substring.
+
+    ``destination_tokens`` reduces a URL to its host, so a five-character host
+    lands in the chain store below the twelve-character floor every other token
+    obeys. Matched with ``token in argument_text``, "x.com" then fires on
+    "box.combo". The identifier branch already solved exactly this with boundary
+    matching; destinations got neither guard.
+    """
+    extractor = FeatureExtractor()
+    response = json.dumps({"note": "shortener https://x.com/abc and a link"})
+    _drive(extractor, "read_note", {}, response)
+
+    unrelated = ObservedCall("send_email", {"body": "see the box.combo shelf"}, "s", 1002.0)
+    assert extractor.extract(unrelated)[DF_CHAINED] == 0.0
+
+    # The host itself, standing alone, must still chain -- the guard is a boundary,
+    # not a length floor. Landing 2 exists so short entities remain chainable.
+    genuine = ObservedCall("send_email", {"body": "posted to x.com"}, "s", 1004.0)
+    assert extractor.extract(genuine)[DF_CHAINED] == 1.0
