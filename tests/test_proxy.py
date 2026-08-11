@@ -652,3 +652,59 @@ def test_trace_line_model_is_null_not_absent_when_unasserted():
         server="stub", tool="t", stage=1, severity="NONE", rules=[], blocked=False
     )
     assert "model" in line and line["model"] is None
+
+
+# ------------------------------------------------------- per-call server topology
+
+
+def test_server_map_attributes_each_call_to_its_own_server():
+    """dim 9 and R2 both key on CallRecord.server, which one process can vary per call.
+
+    One proxy process fronting a multi-app environment used to assert a single label
+    for the whole session, which is a claim that the environment is one MCP server --
+    false for AgentDojo's workspace suite. See agentdojo_bridge/topology.py.
+    """
+    interceptor, _ = make_interceptor(
+        enforcing=False,
+        server_map={
+            "send_email": "workspace-email",
+            "search_files": "workspace-cloud-drive",
+        },
+    )
+    interceptor.on_request(tool_call(1, "search_files", {"query": "notes"}))
+    interceptor.on_response({"jsonrpc": "2.0", "id": 1, "result": {"file": "budget.xlsx"}})
+    interceptor.on_request(tool_call(2, "send_email", {"recipient": "a@b.c", "body": "budget.xlsx"}))
+    interceptor.on_response({"jsonrpc": "2.0", "id": 2, "result": {"sent": True}})
+
+    servers = [record.server for record in interceptor.analyzer.window]
+    assert servers == ["workspace-cloud-drive", "workspace-email"]
+
+
+def test_unmapped_tool_falls_back_to_the_declared_server():
+    interceptor, _ = make_interceptor(
+        enforcing=False, server_map={"send_email": "workspace-email"}
+    )
+    interceptor.on_request(tool_call(1, "get_user_info", {}))
+    interceptor.on_response({"jsonrpc": "2.0", "id": 1, "result": {"name": "x"}})
+    assert interceptor.analyzer.window[-1].server == "test"
+
+
+def test_no_server_map_is_the_current_behaviour_unchanged():
+    interceptor, _ = make_interceptor(enforcing=False)
+    interceptor.on_request(tool_call(1, "send_email", {"recipient": "a@b.c"}))
+    interceptor.on_response({"jsonrpc": "2.0", "id": 1, "result": {"sent": True}})
+    assert interceptor.analyzer.window[-1].server == "test"
+
+
+def test_server_map_flag_rejects_a_non_mapping_document(tmp_path):
+    """A malformed map must fail at startup, not silently degrade to one server."""
+    bad = tmp_path / "map.json"
+    bad.write_text(json.dumps(["send_email", "workspace-email"]), encoding="utf-8")
+    result = subprocess.run(
+        [sys.executable, "-m", "chainwatch", "--no-log", "--server-map", str(bad), "--", "true"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode != 0
+    assert "must be a JSON object" in result.stderr

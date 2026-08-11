@@ -17,11 +17,13 @@ Design rules, both inherited from mcpwall so the two layers behave consistently:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import subprocess
 import sys
 import threading
 import uuid
+from pathlib import Path
 from typing import Any, TextIO
 
 from ..audit import DEFAULT_LOG_DIR, AuditLog
@@ -162,6 +164,11 @@ def main(argv: list[str] | None = None) -> int:
         description="Sequential multi-step attack detection for MCP (arXiv:2607.19432v1)",
     )
     parser.add_argument("--server", default=None, help="name for this server in alerts and logs")
+    parser.add_argument(
+        "--server-map",
+        default=None,
+        help="JSON file mapping tool name -> server label; overrides --server per call",
+    )
     parser.add_argument("--window", type=int, default=10, help="sliding window k (default 10)")
     parser.add_argument("--steps", type=int, default=5, help="step threshold m (default 5)")
     parser.add_argument(
@@ -239,8 +246,20 @@ def main(argv: list[str] | None = None) -> int:
         )
         sys.stderr.flush()
 
+    # Validated here rather than trusted: a map that is not str -> str would silently
+    # degrade back to one server per session, which is the false topology --server-map
+    # exists to remove, and it would do so with no visible symptom in the corpus.
+    server_map = None
+    if options.server_map:
+        server_map = json.loads(Path(options.server_map).read_text(encoding="utf-8"))
+        if not isinstance(server_map, dict) or not all(
+            isinstance(key, str) and isinstance(value, str) for key, value in server_map.items()
+        ):
+            parser.error("--server-map must be a JSON object of string -> string")
+
     interceptor = Interceptor(
         server=server_name,
+        server_map=server_map,
         analyzer=backend,
         enforcing=not options.observe_only,
         audit=audit,

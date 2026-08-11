@@ -61,6 +61,12 @@ class Interceptor:
     """Stateful inspector for one proxied MCP server."""
 
     server: str = "default"
+    #: Tool name -> the server that tool lives on, when one proxy process fronts a
+    #: multi-app environment. ``server`` above is the fallback. Per call, because
+    #: features.py computes dim 9 from the record's server changing and rules.py's R2
+    #: counts distinct servers in the window -- both read the ``CallRecord``, not this
+    #: object, so one process can report the topology it is actually standing in.
+    server_map: dict[str, str] | None = None
     analyzer: SessionAnalyzer = field(default_factory=SessionAnalyzer)
     #: Where alerts are written. Injectable so tests can capture them.
     emit: Callable[[str], None] | None = None
@@ -93,6 +99,12 @@ class Interceptor:
             self.emit = self._default_emit
         self._idle.set()
 
+    def _server_for(self, tool: str) -> str:
+        """Which server this tool lives on. ``self.server`` when nothing says otherwise."""
+        if not self.server_map:
+            return self.server
+        return self.server_map.get(tool, self.server)
+
     # ------------------------------------------------------------------ inbound
 
     def on_request(self, message: dict[str, Any]) -> Decision:
@@ -112,7 +124,7 @@ class Interceptor:
         call = ObservedCall(
             tool=tool,
             arguments=arguments,
-            server=self.server,
+            server=self._server_for(tool),
             timestamp=time.time(),
         )
         with self._lock:
