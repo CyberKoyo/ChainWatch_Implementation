@@ -102,6 +102,18 @@ class AgentDojoAdapter:
             for f in self.suite.tools
         ]
 
+    def tool_functions(self) -> dict[str, Any]:
+        """Tool name -> the *underlying* python callable the suite publishes.
+
+        The runtime's own values are ``agentdojo.functions_runtime.Function`` wrappers,
+        whose ``__module__`` is that wrapper's module and says nothing about which app a
+        tool belongs to; ``Function.run`` is the function AgentDojo defined in
+        ``default_suites/v1/tools/<app>_client.py``. ``topology.server_map`` reads
+        ``__module__`` off these, so it must be the inner callable. Returns the runtime
+        dict ``call_tool`` already dispatches through rather than a second lookup.
+        """
+        return {name: function.run for name, function in self.runtime.functions.items()}
+
     def call_tool(self, tool: str, arguments: dict[str, Any]) -> Any:
         self.trace.append(FunctionCall(function=tool, args=dict(arguments)))
         result, error = self.runtime.run_function(self.env, tool, arguments)

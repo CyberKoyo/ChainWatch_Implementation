@@ -271,3 +271,49 @@ def test_decidability_gate_passes():
     )
     assert r.returncode == 0, r.stdout + r.stderr
     assert "PASS" in r.stdout
+
+
+def test_server_map_covers_every_published_tool_and_splits_workspace():
+    """Derived from AgentDojo's own module partition -- never hand-listed.
+
+    Hand-listing would rot silently when the vendored package moves a tool, and a
+    stale map is a false topology, which is exactly the defect this task exists to
+    remove. See CLAUDE.md section 14 on `server` being asserted.
+    """
+    from agentdojo_bridge.adapter import AgentDojoAdapter
+    from agentdojo_bridge.topology import server_map
+
+    adapter = AgentDojoAdapter("workspace", {})
+    published = {tool["name"] for tool in adapter.list_tools()}
+    mapping = server_map("workspace")
+
+    assert set(mapping) == published, "every published tool needs exactly one label"
+    labels = set(mapping.values())
+    assert labels >= {"workspace-email", "workspace-calendar", "workspace-cloud-drive"}
+    assert mapping["send_email"] == "workspace-email"
+    assert mapping["get_day_calendar_events"] == "workspace-calendar"
+
+
+def test_server_map_is_a_function_of_the_suite_alone():
+    """Topology must not correlate with the label. This is the `win_occupancy` check.
+
+    `server_map` takes no injection argument, so label-correlation is structurally
+    impossible rather than merely untested -- and this test is what pins that signature.
+    """
+    import inspect
+
+    from agentdojo_bridge.topology import server_map
+
+    assert list(inspect.signature(server_map).parameters) == ["suite"]
+    assert server_map("workspace") == server_map("workspace")
+
+
+def test_every_suite_splits_into_at_least_two_servers():
+    """R2 needs >=2 distinct servers in the window; a suite that maps to one cannot
+    reach it however the session is captured. Measured per suite rather than assumed
+    from `workspace` alone."""
+    from agentdojo_bridge.adapter import SUITE_NAMES
+    from agentdojo_bridge.topology import server_map
+
+    for suite in SUITE_NAMES:
+        assert len(set(server_map(suite).values())) >= 2, suite
