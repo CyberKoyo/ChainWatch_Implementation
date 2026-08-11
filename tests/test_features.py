@@ -860,3 +860,45 @@ def test_a_short_destination_token_does_not_match_inside_an_unrelated_word():
     # not a length floor. Landing 2 exists so short entities remain chainable.
     genuine = ObservedCall("send_email", {"body": "posted to x.com"}, "s", 1004.0)
     assert extractor.extract(genuine)[DF_CHAINED] == 1.0
+
+
+def test_a_destination_matches_through_the_normalisation_it_was_remembered_under():
+    """``destination_tokens`` lowercases contacts and strips IBAN separators.
+
+    The matcher compared raw, so Landing 2 only fired when the agent happened to
+    copy the entity in the extractor's own spelling. The AgentDojo evidence case
+    passes solely because that IBAN is already uppercase and separator-free --
+    the one spelling where the asymmetry is invisible.
+    """
+    extractor = FeatureExtractor()
+    _drive(
+        extractor,
+        "read_emails",
+        {},
+        json.dumps({"emails": [{"from": "Alice@Gmail.com", "body": "hello"}]}),
+    )
+    shouting = ObservedCall("send_email", {"to": "ALICE@GMAIL.COM"}, "s", 1002.0)
+    assert extractor.extract(shouting)[DF_CHAINED] == 1.0
+
+
+def test_an_iban_read_compact_matches_when_it_is_sent_back_formatted():
+    """The API returns it compact; the agent writes it out in groups of four.
+
+    Only this direction needs the fix, and saying which is the point. Read spaced
+    and sent spaced, the whole-leaf sliding window already matches. Read spaced
+    and sent compact, the remembered token is itself compact, so a raw comparison
+    lands. Read compact and sent spaced, neither works: no window of a compact
+    leaf survives inside a spaced argument, and the compact token is not a
+    substring of it either. Both sides have to be stripped before comparing.
+    """
+    extractor = FeatureExtractor()
+    _drive(
+        extractor,
+        "read_file",
+        {"path": "/bill.txt"},
+        json.dumps({"account": "GB29NWBK60161331926819", "currency": "GBP"}),
+    )
+    formatted = ObservedCall(
+        "send_money", {"recipient": "GB29 NWBK 6016 1331 9268 19"}, "s", 1002.0
+    )
+    assert extractor.extract(formatted)[DF_CHAINED] == 1.0
