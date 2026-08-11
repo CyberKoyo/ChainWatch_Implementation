@@ -92,12 +92,33 @@ def build_server_args(recipe: AgentDojoRecipe, python: str, score_out: Path) -> 
     return argv
 
 
+def server_map_path(suite: str, directory: Path) -> Path:
+    """Where this suite's topology map lives. One file per suite, not per session:
+    it is a function of the suite alone, which is what keeps it label-free."""
+    return directory / f"{suite}.json"
+
+
+def write_server_map(suite: str, directory: Path) -> Path:
+    """Materialise the per-app topology the proxy will read with ``--server-map``.
+
+    Separate from :func:`build_chain_argv` on purpose: a dry run builds argv but owns
+    no state on disk (tests/test_capture_drivers.py), so only the live path writes.
+    """
+    from agentdojo_bridge.topology import server_map
+
+    directory.mkdir(parents=True, exist_ok=True)
+    path = server_map_path(suite, directory)
+    path.write_text(json.dumps(server_map(suite), indent=2, sort_keys=True), encoding="utf-8")
+    return path
+
+
 def build_chain_argv(
     recipe: AgentDojoRecipe,
     *,
     python: str,
     score_out: Path,
     log_dir: Path,
+    server_map_out: Path,
     model: str = DEFAULT_MODEL,
 ) -> list[str]:
     return build_mcpwall_chain_argv(
@@ -105,10 +126,13 @@ def build_chain_argv(
         label=recipe.label,
         source=DEFAULT_SOURCE,
         model=model,
-        # The suite is the environment ml/dataset.py groups on. It is identical for a
-        # benign row and its attack twin, so it cannot carry the label.
+        # The suite is the session label and the fallback for any tool the map does
+        # not name; the *environment* ml/dataset.py groups on comes from the manifest
+        # coordinate, not from here. Both are identical for a benign row and its
+        # attack twin, so neither can carry the label.
         server_name=recipe.suite,
         log_dir=log_dir,
+        server_map_path=server_map_out,
         server_args=build_server_args(recipe, python, score_out),
     )
 
@@ -348,6 +372,7 @@ def main(argv: list[str] | None = None) -> int:
     scores = state / "scores"
     workdir = state / "agent-cwd"
     agent_home = state / "agent-home"
+    server_maps = state / "server-maps"
 
     run_stamp = new_capture_run_id()
     python = sys.executable
@@ -376,6 +401,9 @@ def main(argv: list[str] | None = None) -> int:
                             python=python,
                             score_out=score_out,
                             log_dir=session_staging,
+                            # Named, not written: a dry run previews the real argv and
+                            # still owns no state on disk.
+                            server_map_out=server_map_path(recipe.suite, server_maps),
                             model=options.model,
                         ),
                     },
@@ -388,7 +416,7 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     # Only a live run owns state on disk.
-    for directory in (logs, trace_staging, transcripts, scores, workdir, agent_home):
+    for directory in (logs, trace_staging, transcripts, scores, workdir, agent_home, server_maps):
         directory.mkdir(parents=True, exist_ok=True)
 
     score_aggregate = state / f"{DEFAULT_SOURCE}_scores-{run_stamp}.jsonl"
@@ -425,6 +453,7 @@ def main(argv: list[str] | None = None) -> int:
                     python=python,
                     score_out=score_out,
                     log_dir=session_staging,
+                    server_map_out=write_server_map(recipe.suite, server_maps),
                     model=options.model,
                 ),
                 env=build_capture_child_env(

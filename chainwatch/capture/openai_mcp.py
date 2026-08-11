@@ -196,6 +196,7 @@ def build_mcpwall_chain_argv(
     server_name: str,
     server_args: Sequence[str],
     log_dir: Path | str | None = None,
+    server_map_path: Path | str | None = None,
 ) -> list[str]:
     """Build the only valid capture ordering: mcpwall -> chainwatch -> server.
 
@@ -203,6 +204,11 @@ def build_mcpwall_chain_argv(
     names the server after the last argv token (proxy/__main__.py:210), which is the
     score-file path on one half and ``--benign`` on the other -- and ml/dataset.py
     reads that field as the leave-one-environment-out environment.
+
+    ``server_map_path`` declares the *per-call* topology on top of that fallback: a
+    suite that publishes email, calendar and drive is three MCP servers in any real
+    deployment, and asserting one label for it is what kept dim 9 and R2 at zero
+    (GPT_GRID_RESULTS.md section 4). Optional, so route F's argv is unchanged.
     """
     if label not in {"benign", "attack"}:
         raise ValueError("label must be benign or attack")
@@ -235,6 +241,8 @@ def build_mcpwall_chain_argv(
     ]
     if log_dir is not None:
         argv.extend(["--log-dir", str(log_dir)])
+    if server_map_path is not None:
+        argv.extend(["--server-map", str(server_map_path)])
     argv.extend(["--", *[str(part) for part in server_args]])
     return argv
 

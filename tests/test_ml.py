@@ -532,3 +532,49 @@ def test_a_session_with_no_manifest_entry_groups_on_its_own_id(tmp_path):
     dataset = build(trace, groups=("current",), sources=["realism"])
     assert len(dataset) == 3
     assert set(dataset.groups.tolist()) == set(dataset.sessions.tolist())
+
+
+def test_environment_axis_is_the_suite_not_the_per_call_server(tmp_path, monkeypatch):
+    """Leave-one-environment-out must keep its meaning across the topology change.
+
+    Before this, `dataset` read `server` as the environment. With per-app servers that
+    silently turns a 4-environment holdout into a 9-environment one, moving every arm
+    number in GPT_GRID_RESULTS.md section 6 for a non-modelling reason.
+    """
+    import json as _json
+
+    from chainwatch.capture.manifest import ManifestEntry, append_entry
+    from chainwatch.ml.dataset import build
+
+    home = tmp_path / "home"
+    home.mkdir()
+    append_entry(
+        home / "agentdojo-gpt4omini_manifest.jsonl",
+        ManifestEntry(
+            coordinate=("agentdojo", "benign", "workspace", "user_task_0", "None"),
+            fold_group="agentdojo:workspace:user_task_0",
+            session="ad-1",
+            source="agentdojo-gpt4omini",
+            fingerprint="f",
+            corpus_revision="v3",
+            git_commit="deadbeef",
+            native={"utility": True, "security": None},
+            calls=2,
+            cost_usd=0.001,
+            status="published",
+        ),
+    )
+    monkeypatch.setenv("CHAINWATCH_HOME", str(home))
+
+    trace = tmp_path / "ad.jsonl"
+    trace.write_text("\n".join(
+        _json.dumps({
+            "session": "ad-1", "source": "agentdojo-gpt4omini", "label": "benign",
+            "call": index, "stage": 1, "severity": "NONE", "rules": [],
+            "server": server, "v": [0.0] * 20,
+        })
+        for index, server in enumerate(["workspace-cloud-drive", "workspace-email"], start=1)
+    ) + "\n", encoding="utf-8")
+
+    dataset = build(trace, groups=("current",), sources=["agentdojo-gpt4omini"])
+    assert set(dataset.environments.tolist()) == {"workspace"}

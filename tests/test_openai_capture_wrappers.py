@@ -82,6 +82,9 @@ def test_agentdojo_chain_uses_fixed_gpt_source_and_pinned_model(tmp_path):
         python="/venv/bin/python",
         score_out=tmp_path / "score.json",
         log_dir=tmp_path / "logs",
+        # required on purpose: an AgentDojo chain that forgets its topology would
+        # re-assert the false one-server claim --server-map exists to remove
+        server_map_out=tmp_path / "map.json",
     )
 
     assert AGENTDOJO_SOURCE == "agentdojo-gpt4omini"
@@ -154,6 +157,9 @@ def test_agentdojo_server_name_is_the_suite_not_the_last_argv_token(tmp_path):
         python="/venv/bin/python",
         score_out=tmp_path / "score.json",
         log_dir=tmp_path / "logs",
+        # required on purpose: an AgentDojo chain that forgets its topology would
+        # re-assert the false one-server claim --server-map exists to remove
+        server_map_out=tmp_path / "map.json",
     )
 
     assert argv[argv.index("--server") + 1] == "travel"

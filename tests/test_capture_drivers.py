@@ -129,3 +129,60 @@ def test_both_drivers_expose_the_same_grid_options():
     for module in (agentdojo, injecagent):
         options = {action.dest for action in module._parser()._actions}
         assert wanted <= options, f"{module.__name__} is missing {wanted - options}"
+
+
+def test_agentdojo_chain_argv_declares_the_per_app_topology(tmp_path):
+    """One proxy process, several servers -- because that is the real topology.
+
+    `--server` stays the suite: it is the human-readable session label and the
+    fallback for any tool the map does not name. `--server-map` is what makes
+    dim 9 and R2 reachable at all (GPT_GRID_RESULTS.md section 4).
+    """
+    import scripts.capture_agentdojo_openai as driver
+
+    recipe = driver.AgentDojoRecipe("benign", "workspace", "user_task_0", "-", "do it")
+    map_path = driver.write_server_map("workspace", tmp_path)
+    argv = driver.build_chain_argv(
+        recipe,
+        python="python",
+        score_out=tmp_path / "s.json",
+        log_dir=tmp_path,
+        server_map_out=map_path,
+    )
+
+    assert "--server-map" in argv
+    assert argv[argv.index("--server-map") + 1] == str(map_path)
+    # the fallback label stays the suite: it is the human-readable session label
+    assert argv[argv.index("--server") + 1] == "workspace"
+    # the flag belongs to chainwatch, so it must precede the *last* `--`, which is
+    # the separator handing the rest of argv to the benchmark server
+    assert argv.index("--server-map") < len(argv) - 1 - argv[::-1].index("--")
+
+    written = json.loads(map_path.read_text(encoding="utf-8"))
+    assert written["send_email"] == "workspace-email"
+    assert written["get_day_calendar_events"] == "workspace-calendar"
+
+
+def test_the_topology_is_identical_for_a_benign_row_and_its_attack_twin(tmp_path):
+    """A map that differed by label would be `win_occupancy` again, in a new column."""
+    import scripts.capture_agentdojo_openai as driver
+
+    benign = driver.write_server_map("workspace", tmp_path / "b")
+    attack = driver.write_server_map("workspace", tmp_path / "a")
+    assert json.loads(benign.read_text()) == json.loads(attack.read_text())
+
+
+def test_dry_run_still_owns_no_state_on_disk_with_the_topology_flag(tmp_path, capsys):
+    """The map is written by the live path only. build_chain_argv must not write it,
+    or every dry run would litter the state directory it promises not to touch."""
+    import scripts.capture_agentdojo_openai as driver
+
+    recipes = tmp_path / "r.tsv"
+    recipes.write_text(
+        "benign\tworkspace\tuser_task_0\t-\tdo the thing\n", encoding="utf-8"
+    )
+    assert driver.main([str(recipes), "--dry-run", "--corpus-revision", "v3",
+                        "--state-dir", str(tmp_path / "state")]) == 0
+    line = [json.loads(l) for l in capsys.readouterr().out.splitlines() if l.startswith("{")][0]
+    assert "--server-map" in line["chain_argv"], "dry run must preview the real argv"
+    assert not (tmp_path / "state").exists(), "a dry run owns no state on disk"

@@ -287,23 +287,35 @@ def _rules(entry: dict[str, Any]) -> np.ndarray:
 # ---------------------------------------------------------------------------- build
 
 
-def _manifest_groups() -> dict[str, str]:
-    """Session id -> published fold group, from every manifest on disk.
+def _manifest_groups() -> tuple[dict[str, str], dict[str, str]]:
+    """Session id -> (published fold group, published environment), from every manifest.
 
-    Read once per :func:`build` rather than per row. A missing manifest is not an
-    error: it means this corpus predates the manifest, and the caller falls back
-    to the session id.
+    Read once per :func:`build` rather than per row, and in one pass rather than two.
+    A missing manifest is not an error: it means this corpus predates the manifest,
+    and the caller falls back to the session id and to the trace's own fields.
+
+    The environment comes from the *coordinate* because the trace's ``server`` field
+    no longer always means "environment": since the per-app topology landed it names
+    an app (``workspace-email``), and reading that as the leave-one-environment-out
+    axis would turn a 4-environment holdout into a 9-environment one -- moving every
+    arm number in GPT_GRID_RESULTS.md section 6 for a reason that has nothing to do
+    with the model. Only AgentDojo coordinates carry a suite in that slot; route F's
+    is a data split, so it deliberately falls back to its constant ``server``.
     """
     import os
 
     from chainwatch.capture.manifest import read_entries
 
     home = Path(os.environ.get("CHAINWATCH_HOME", Path.home() / ".chainwatch"))
-    mapping: dict[str, str] = {}
+    groups: dict[str, str] = {}
+    environments: dict[str, str] = {}
     for path in sorted(home.glob("*_manifest.jsonl")):
         for entry in read_entries(path):
-            mapping[entry.session] = entry.fold_group
-    return mapping
+            groups[entry.session] = entry.fold_group
+            coordinate = tuple(entry.coordinate)
+            if len(coordinate) > 2 and coordinate[0] == "agentdojo":
+                environments[entry.session] = str(coordinate[2])
+    return groups, environments
 
 
 def build(
@@ -335,7 +347,7 @@ def build(
     group_ids: list[str] = []
     source_ids: list[str] = []
     environments: list[str] = []
-    manifest_groups = _manifest_groups()
+    manifest_groups, manifest_environments = _manifest_groups()
 
     for calls in load_sessions(path):
         if keep is not None and str(calls[0].get("source")) not in keep:
@@ -378,11 +390,15 @@ def build(
             # get the stronger grouping they need.
             group_ids.append(manifest_groups.get(session_id, session_id))
             source_ids.append(str(entry.get("source")))
-            # Replayed lines carry `environment`; live capture carries `server`
-            # instead, and a bizops line has only the latter. Falling back keeps
+            # The manifest coordinate is the only source that still means
+            # "environment": replayed lines carry `environment`, live capture carries
+            # `server`, and since the per-app topology landed `server` names an app.
+            # A bizops line has only the last of the three. Falling back keeps
             # leave-one-environment-out able to hold out a real population rather
             # than lumping every captured session into a single "None" stratum.
-            environment = entry.get("environment")
+            environment = manifest_environments.get(session_id)
+            if environment is None:
+                environment = entry.get("environment")
             if environment is None:
                 environment = entry.get("server")
             environments.append(str(environment) if environment is not None else "unknown")
