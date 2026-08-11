@@ -30,6 +30,16 @@ DEFAULT_SYSTEM_PROMPT = (
     "available tools. Continue until the task is complete, then answer concisely."
 )
 
+
+def system_prompt_sha256(prompt: str = DEFAULT_SYSTEM_PROMPT) -> str:
+    """The prompt's identity, hashed in exactly one place.
+
+    The usage row already carries this value and the capture fingerprint now needs
+    it too. Two call sites hashing the same string independently is a thing that
+    can drift, and a fingerprint that drifts from the usage row is worse than none.
+    """
+    return hashlib.sha256(prompt.encode("utf-8")).hexdigest()
+
 # USD per one million tokens. A pinned capture model is intentional: silently
 # estimating an unknown/remapped model at this rate would make the cost sidecar false.
 _MODEL_PRICES = {
@@ -640,7 +650,7 @@ def run_session(
     status = "mcp_error"
     error: str | None = None
     process: MCPProcess | None = None
-    system_hash = hashlib.sha256(spec.system_prompt.encode("utf-8")).hexdigest()
+    system_hash = system_prompt_sha256(spec.system_prompt)
 
     _append_jsonl(
         spec.transcript_path,

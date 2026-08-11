@@ -17,6 +17,16 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from chainwatch.capture.manifest import (  # noqa: E402
+    ManifestEntry,
+    append_entry,
+    completed_coordinates,
+    config_fingerprint,
+    coordinate,
+    duplicate_coordinates,
+    fold_group,
+    read_entries,
+)
 from chainwatch.capture.openai_mcp import (  # noqa: E402
     CaptureBudget,
     SessionSpec,
@@ -26,6 +36,7 @@ from chainwatch.capture.openai_mcp import (  # noqa: E402
     publish_session_traces,
     quarantine_session_traces,
     run_session,
+    system_prompt_sha256,
 )
 
 
@@ -177,6 +188,67 @@ def _append_score(
         handle.write(json.dumps(verdict, separators=(",", ":")) + "\n")
 
 
+def recipe_score_row(recipe: AgentDojoRecipe) -> dict:
+    """A recipe rendered in the shape its own score sidecar will take.
+
+    The recipe spells a benign row's injection task `-` because the TSV has no
+    empty column; the sidecar spells it `None`. One normalisation here means one
+    coordinate function serves both sides -- compare them raw and a resumed run
+    matches nothing it captured.
+    """
+    return {
+        "label": recipe.label,
+        "suite": recipe.suite,
+        "user_task": recipe.user_task,
+        "injection_task": None if recipe.injection_task == "-" else recipe.injection_task,
+    }
+
+
+def recipe_coordinate(recipe: AgentDojoRecipe) -> tuple[str, ...]:
+    return coordinate(recipe_score_row(recipe))
+
+
+def recipe_fold_group(recipe: AgentDojoRecipe) -> str:
+    return fold_group(recipe_score_row(recipe))
+
+
+def resolve_resume_skips(manifest_path: Path, *, fingerprint: str) -> set[tuple[str, ...]]:
+    """Coordinates a resumed run may skip.
+
+    Only complete entries from this exact configuration count. A coordinate
+    captured under a different prompt, model or corpus revision is a different
+    session wearing the same name, and skipping it would silently mix corpora --
+    note 30's confound with a different carrier.
+    """
+    return completed_coordinates(read_entries(manifest_path), fingerprint=fingerprint)
+
+
+def assert_no_duplicates(manifest_path: Path) -> None:
+    """A duplicated coordinate is a corpus that double-counts a grid point."""
+    dupes = duplicate_coordinates(read_entries(manifest_path))
+    if dupes:
+        for key, count in sorted(dupes.items()):
+            print(f"duplicate coordinate {key}: {count} entries", file=sys.stderr)
+        raise SystemExit(5)
+
+
+def assert_clean_worktree() -> str:
+    """Return HEAD, refusing if tracked files are dirty.
+
+    Untracked files are allowed on purpose: the operator's journal and the ignored
+    CLAUDE.md live in this tree, and neither changes what the agent does.
+    """
+    import subprocess
+
+    dirty = subprocess.run(["git", "diff", "--stat", "HEAD"], cwd=ROOT,
+                           capture_output=True, text=True, check=False).stdout.strip()
+    if dirty:
+        print("worktree has uncommitted tracked changes; refusing capture", file=sys.stderr)
+        raise SystemExit(6)
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT,
+                          capture_output=True, text=True, check=True).stdout.strip()
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="capture_agentdojo_openai.py")
     parser.add_argument("recipes", nargs="?", type=Path, default=ROOT / "docs/recipes_agentdojo.tsv")
@@ -188,6 +260,14 @@ def _parser() -> argparse.ArgumentParser:
         default=None,
         help="restrict to one or more suites; repeatable. Applied before --limit.",
     )
+    parser.add_argument("--corpus-revision", default=None,
+                        help="corpus revision label; required for live capture")
+    parser.add_argument("--groups-per-partition", type=_positive_int, default=None,
+                        help="whole published task groups to take from each suite")
+    parser.add_argument("--resume", action="store_true",
+                        help="skip coordinates already complete under this configuration")
+    parser.add_argument("--require-clean-git", action="store_true",
+                        help="refuse to capture from a tree with uncommitted tracked changes")
     parser.add_argument("--model", choices=(DEFAULT_MODEL,), default=DEFAULT_MODEL)
     parser.add_argument("--max-cost-usd", type=_nonnegative_float, default=3.0)
     parser.add_argument("--max-turns", type=_positive_int, default=12)
@@ -225,6 +305,37 @@ def main(argv: list[str] | None = None) -> int:
         recipes = [recipe for recipe in recipes if recipe.suite in wanted]
         if not recipes:
             parser.error(f"no recipes for suite(s): {', '.join(sorted(wanted))}")
+    if not options.dry_run and not options.corpus_revision:
+        parser.error("live capture requires --corpus-revision")
+
+    manifest_path = options.state_dir.resolve() / f"{DEFAULT_SOURCE}_manifest.jsonl"
+    assert_no_duplicates(manifest_path)
+    git_commit = assert_clean_worktree() if options.require_clean_git else "unpinned"
+
+    if options.groups_per_partition is not None:
+        # Whole published task groups, in canonical recipe order. Taking a prefix
+        # of rows would split a user task across the benign/attack boundary and
+        # leave a partition whose benign half is a different task from its attack
+        # half -- a fold group with one side missing.
+        taken: dict[str, list[str]] = {}
+        for recipe in recipes:
+            group = recipe_fold_group(recipe)
+            seen = taken.setdefault(recipe.suite, [])
+            if group not in seen and len(seen) < options.groups_per_partition:
+                seen.append(group)
+        keep = {group for groups in taken.values() for group in groups}
+        recipes = [recipe for recipe in recipes if recipe_fold_group(recipe) in keep]
+
+    fingerprint = None
+    skips: set[tuple[str, ...]] = set()
+    if options.resume or not options.dry_run:
+        fingerprint = config_fingerprint(
+            model=options.model, system_prompt_sha256=system_prompt_sha256(),
+            max_turns=options.max_turns,
+            corpus_revision=options.corpus_revision or "unset")
+        if options.resume:
+            skips = resolve_resume_skips(manifest_path, fingerprint=fingerprint)
+
     if options.limit is not None:
         recipes = recipes[: options.limit]
     if not recipes:
@@ -256,6 +367,9 @@ def main(argv: list[str] | None = None) -> int:
                         "injection_task": recipe.injection_task,
                         "source": DEFAULT_SOURCE,
                         "model": options.model,
+                        "coordinate": list(recipe_coordinate(recipe)),
+                        "fold_group": recipe_fold_group(recipe),
+                        "selected": recipe_coordinate(recipe) not in skips,
                         "cwd": str(workdir),
                         "chain_argv": build_chain_argv(
                             recipe,
@@ -268,6 +382,9 @@ def main(argv: list[str] | None = None) -> int:
                     separators=(",", ":"),
                 )
             )
+        selected = sum(1 for recipe in recipes if recipe_coordinate(recipe) not in skips)
+        print(f"selected={selected} skipped_by_resume={len(recipes) - selected} "
+              f"planned={len(recipes)}", file=sys.stderr)
         return 0
 
     # Only a live run owns state on disk.
@@ -286,6 +403,8 @@ def main(argv: list[str] | None = None) -> int:
         if not budget.available:
             print(f"budget reached after {index - 1} session(s); stopping", file=sys.stderr)
             break
+        if recipe_coordinate(recipe) in skips:
+            continue
         session = f"{DEFAULT_SOURCE}-{run_stamp}-{index:03d}"
         score_out = scores / f"{session}.json"
         session_staging = trace_staging / session
@@ -357,6 +476,26 @@ def main(argv: list[str] | None = None) -> int:
                         recipe=recipe,
                         session=session,
                         result=result,
+                    )
+                    append_entry(
+                        manifest_path,
+                        ManifestEntry(
+                            coordinate=recipe_coordinate(recipe),
+                            fold_group=recipe_fold_group(recipe),
+                            session=session,
+                            source=DEFAULT_SOURCE,
+                            fingerprint=fingerprint,
+                            corpus_revision=options.corpus_revision,
+                            git_commit=git_commit,
+                            native={"utility": verdict.get("utility"),
+                                    "security": verdict.get("security")},
+                            calls=trace_calls,
+                            cost_usd=result.estimated_cost_usd,
+                            status=result.status,
+                            artifacts={"trace": str(logs / f"{session}.jsonl"),
+                                       "transcript": str(transcript),
+                                       "score": str(score_out)},
+                        ),
                     )
                     if trace_calls > 0:
                         captured += 1
