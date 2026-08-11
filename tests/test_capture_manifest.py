@@ -101,3 +101,39 @@ def test_duplicate_coordinates_reports_the_two_already_on_disk(tmp_path):
     manifest.append_entry(path, _entry(ADOJO_BENIGN, session="s9"))
     dupes = manifest.duplicate_coordinates(manifest.read_entries(path))
     assert list(dupes.values()) == [2]
+
+
+def _append_burst(path, writer, count):
+    """One shard's worth of appends, in its own process."""
+    for index in range(count):
+        manifest.append_entry(
+            path,
+            _entry(
+                ADOJO_BENIGN,
+                session=f"w{writer}-{index}",
+                coordinate=("agentdojo", "benign", "banking", f"user_task_{writer}", f"n{index}"),
+            ),
+        )
+
+
+def test_concurrent_writers_never_tear_a_row(tmp_path):
+    """Six parallel shards append to one manifest, so a torn row is silent corruption.
+
+    A row is ~700 bytes and `append_entry` opens O_APPEND, so each write should be
+    atomic on Linux -- but nothing asserted it until the grid needed six writers,
+    and an unasserted floor is the defect note 37 is about.
+    """
+    from multiprocessing import Process
+
+    path = tmp_path / "manifest.jsonl"
+    writers, per_writer = 6, 40
+    procs = [Process(target=_append_burst, args=(path, w, per_writer)) for w in range(writers)]
+    for proc in procs:
+        proc.start()
+    for proc in procs:
+        proc.join(timeout=120)
+
+    assert [proc.exitcode for proc in procs] == [0] * writers
+    entries = manifest.read_entries(path)
+    assert len(entries) == writers * per_writer
+    assert len({entry.coordinate for entry in entries}) == writers * per_writer
