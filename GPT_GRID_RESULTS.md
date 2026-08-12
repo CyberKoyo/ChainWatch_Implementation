@@ -378,9 +378,9 @@ Both in `scripts/archive_gpt_captures.py`, both caught before anything was moved
 
 Note 31's species both times: a name or a glob that asserts a property instead of deriving it.
 
-## 10.7 Three offline measurements over the v3 corpus (2026-08-11)
+## 10.7 Five offline measurements over the v3 corpus (2026-08-11)
 
-All three read the **v3** corpus already on disk — 452 sessions, 1924 calls — and cost **zero API
+All five read the **v3** corpus already on disk — 452 sessions, 1924 calls — and cost **zero API
 requests**. Nothing here changed a rule, a prior, a threshold or a slide; the decision to record
 rather than act was taken before any of them ran. Every number is v3 and is never pooled with v2.
 
@@ -507,3 +507,151 @@ Detection pins at 100% because every one of the 76 natively-successful attacks f
 under arm A's loose any-of-R1-R5 predicate — which is also why its 55.3% false-positive figure is
 not slide 10's number. R2 alone fires on 29.9% of benign sessions (§10.2). The CRITICAL predicate
 on the same sessions is 97.4% / 10.5%, unchanged.
+
+### 10.7.4 Per-call latency, measured for the first time — and two structural arguments refuted
+
+`scripts/engine_latency.py`. Nothing in this project had ever timed anything: `perf_counter`
+appeared nowhere in `chainwatch/`, `scripts/` or `tests/`, so every performance statement about the
+engine was an argument from structure. Two of those arguments were wrong.
+
+**Real responses, not stand-ins.** The OC group sweeps the response body, so timing it over invented
+text measures nothing. The executor transcripts carry each call's actual `result`, and all **452
+sessions paired, 0 skipped, 1924 calls** — matching §10.1's call count exactly, which is what says
+the pairing is the real trajectory rather than a reconstruction. Response bytes: **p50 250, mean
+1097, p99 29387, max 30004**.
+
+| stage | p50 | p90 | p99 | max | mean |
+|---|---|---|---|---|---|
+| `submit` (pre-flight total) | 1473 | 2968 | 5818 | 12614 | 1720 |
+| ├ `extract` (TC/PS/DF/TF) | 147 | 468 | 1334 | 3219 | 228 |
+| ├ `viterbi` (HMM decode) | **610** | 1541 | 2267 | 3162 | 765 |
+| └ `evaluate` (R1–R5) | 22 | 39 | 72 | 127 | 26 |
+| `complete` (post-response total) | 2141 | 4815 | 49463 | 84438 | 3476 |
+| └ OC regex fill | 352 | 2069 | **29382** | 41571 | 1305 |
+| **TOTAL per call** | **3887** | **7541** | **50373** | **85174** | **5197** |
+
+Microseconds. Single-threaded, Python 3.12.3, one machine, min-of-7 on the pure sub-stages and
+single-shot on the two coarse boundaries.
+
+| arm | features | 1 row | 10-row window |
+|---|---|---|---|
+| B `current+window` | 33 | 1122 | 1209 |
+| D everything | 46 | 1138 | 1221 |
+
+**The two refuted arguments.**
+
+1. **The Viterbi decode is not negligible — it is the largest single stage.** 610 µs at p50, and
+   `complete` re-decodes the whole window, so §IV-C's decoder costs **1.53 ms of the 5.20 ms mean**.
+   That is more than the entire regex corpus at pre-flight (228 µs). The readable factored emission
+   of §6 is the price: a Python-level per-state loop over 24 parameters, k times per call, twice.
+2. **The XGBoost arms are not microseconds either — 1.1 ms, and it is almost all wrapper
+   overhead.** Arm D holds 13 more features than B and costs 15 µs more; 120 trees at depth 3 is
+   free. The cost is `predict_proba`'s one-row DMatrix construction and validation. Batching would
+   erase it, and the proxy scores one call at a time by definition.
+
+**Where the mean actually goes.** Percentiles are not additive, so the decomposition uses means,
+which are:
+
+| component | mean µs | share |
+|---|---|---|
+| provenance + output-token bookkeeping (`commit`, `_remember_*`, `_attest_destinations`) | 2082 | **40.1%** |
+| HMM decode (twice per call) | 1531 | 29.5% |
+| regex (`extract` 228 + OC 1305) | 1533 | 29.5% |
+| rules R1–R5 (twice per call) | 52 | 1.0% |
+
+The largest cost in the firewall is neither the model nor the pattern matching — it is remembering
+what it has seen, which is what makes dim 8 and §3 A4's provenance possible at all.
+
+**Swapping the decoder for a booster is a lateral move.** Arms B and E need no stages the rule
+engine's decode provides, so they drop 2×`viterbi` + 2×`evaluate` and pay one `score_window`: a net
+**−55 µs on p50 (−1.4%)** and **−373 µs on the mean (−7.2%)**. The two disagree because the tail is
+regex-bound and the booster is not, so which statistic is quoted changes the answer — a range, not a
+number. Arms C and D go the other way: they consume the `hmm` and `rules` columns, so arm A must run
+first and the booster is strictly additive, **+1.2 ms (+23%)**.
+
+**The finding that matters is not the arm choice.** Per-call cost grows with position in the
+session:
+
+| position | n | p50 |
+|---|---|---|
+| call 1–2 | 836 | 2889 |
+| call 3–5 | 700 | 3911 |
+| call 6+ | 388 | **5438** |
+
+**1.9× from the first calls to the sixth and beyond** — roughly thirty times the arm difference.
+Two compounding causes, both structural: the decode re-runs over a window growing to k=10, and dim
+8 matches against a remembered-output store that only ever grows. v3 sessions average 4.3 calls, so
+the 44-call SHADE trajectory `api_key_calendar_agendas_2` sits far past the right edge of this table
+and is **unmeasured**.
+
+The tail is the operational number: **p99 50 ms, max 85 ms**, driven by the OC sweep over the 30 KB
+response (29 ms at p99 by itself). For a component sitting inline in the stdio chain that matters
+more than the 3.9 ms median.
+
+**Limits.** One machine, one corpus, no concurrency. Observe-only is reproduced — `complete` runs
+even when `submit` blocks — so these are a **ceiling**: an enforcing deployment stops at its first
+CRITICAL and does less work. `extract` is re-timed after `commit` has advanced `last_timestamp`, so
+its TF dims differ from the pre-flight pass (`features.py` warns about exactly this); only dims 10
+and 12 change and the regex work is identical. **Nothing was changed in response** — no rule, no
+prior, and no optimisation attempted.
+
+### 10.7.5 The supervised advantage does not grow with session length
+
+`scripts/arms_by_length.py`. §10.5's arms carry `window` aggregates, so a longer session gives them
+more to aggregate; that predicts the gap over the rule engine should widen with call count. It does
+not. The prediction had never been tested because every arm figure here is reported over a partition
+whose sessions average 4.3 calls.
+
+**This is one step from `win_occupancy` and the design has to say how it avoids it.** Two things do:
+both classes come off one generator (§10.1), and stratifying holds length approximately fixed
+*inside* each stratum, so a within-stratum difference cannot be length carrying the label. `--split`
+defaults to a module constant fixed at **5**, the lower boundary of §5's documented 4–7 call attack
+span, so it is not a boundary chosen after seeing the result. Folds stay task-grouped.
+
+**The `all` stratum reproduces §10.7.3 exactly** — A 100/55.3, B 100/0.0/1.000, D 100/0.0/1.000,
+E 100/47.4/0.943 — and `--self-check` asserts it rather than inviting comparison by eye. That is
+what makes the strata a partition of a checked baseline.
+
+Native-valid (primary), false positives at arm A's detection matched within each stratum:
+
+| stratum | attack / benign | A rules | B | D | E |
+|---|---|---|---|---|---|
+| ≤5 calls | 53 / 28 | 57.1% | **0.0%** (AUC 1.000) | **0.0%** (1.000) | 85.7% (0.722) |
+| >5 calls | 23 / 10 | 50.0% | **0.0%** (1.000) | 20.0% (0.991) | 80.0% (0.837) |
+
+All-attempts (sensitivity):
+
+| stratum | attack / benign | A det / FP | B det / FP / AUC | D det / FP / AUC | E det / FP / AUC |
+|---|---|---|---|---|---|
+| ≤5 calls | 257 / 71 | 60.3 / 38.0 | 70.0 / 0.0 / 0.943 | 60.3 / 0.0 / 0.933 | 65.0 / 0.0 / 0.944 |
+| >5 calls | 98 / 26 | 72.4 / 38.5 | 72.4 / 0.0 / **0.986** | 72.4 / 0.0 / **0.984** | 76.5 / **57.7** / 0.661 |
+
+Four readings:
+
+1. **Arm B is at ceiling in the shorter stratum already** — 100% detection, 0.0% false positives,
+   AUC 1.000 at ≤5 calls. There is no headroom for length to add. Arm D moves the *wrong* way past
+   five calls, 0.0% → 20.0%.
+2. **Length does move AUC, by about +0.04** on all-attempts (B 0.943 → 0.986, D 0.933 → 0.984).
+   That is the window-features mechanism doing what it should. But at the matched operating point
+   false positives are 0.0% in both strata, so the ranking gain buys nothing operationally.
+3. **The rules gain more from length than the booster does.** Arm A's detection rises 60.3% → 72.4%
+   with false positives flat near 38%. Longer sessions help the hand-specified layer too; they do
+   not widen the gap.
+4. **Arm E is the load-bearing row.** Current-call features only, no window: 85.7% / 80.0% false
+   positives on the primary, and it *collapses* on all-attempts past five calls, 0.0% → 57.7% with
+   AUC 0.944 → 0.661. Same signature as §10.7.3. E failing in both strata is what says B and D are
+   not riding a per-call shortcut — the extractable signal is sequential, and now that claim holds
+   within a length stratum rather than across a corpus with mixed lengths.
+
+**The gap is real and length-independent: roughly 38 points of false positives against 0, at matched
+detection, in both strata.** Whatever the supervised arms are worth here, they are worth the same at
+three calls as at twelve.
+
+**Limits, load-bearing.** 0.0% over 28 and 10 benign sessions is a thin denominator, not a triumph:
+in the `>5` primary cell one session is ten percentage points and arm D's 20.0% is two sessions.
+Arm A reads 100% detection because `rule_baseline` uses the loose any-of-R1–R5 predicate, not the
+CRITICAL predicate behind §10.3's 97.4% — and R2's WARNING is why its false positives are 38% here
+against 10.5% there. Fold assignment is order-sensitive at the third decimal (arm D's `>5` AUC moved
+0.984/0.985 between two runs differing only in session ordering), so AUC is quoted to three digits
+and no comparison rests on the last one. Per §8's note 42 every cell remains a single Bernoulli
+draw off one executor and one payload family. **Nothing was changed in response.**
