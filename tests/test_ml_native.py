@@ -69,3 +69,6 @@ def test_outcomes_are_read_off_the_manifest_on_disk(tmp_path):
     assert outcomes["s1"]["route"] == "agentdojo"
     assert outcomes["s1"]["label"] == "attack"
     assert native.is_native_valid("s1", "attack", outcomes)
+    # The whole coordinate survives the join: nothing else can answer "which
+    # suite was this?" now that `server` names an app rather than a suite.
+    assert outcomes["s1"]["coordinate"][0] == "agentdojo"

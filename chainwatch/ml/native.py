@@ -37,6 +37,11 @@ def native_outcomes(manifest_paths: Iterable[Path]) -> dict[str, dict]:
             outcomes[entry.session] = {
                 "route": entry.coordinate[0],
                 "label": entry.coordinate[1],
+                # The whole coordinate, not only the two keys this module reads:
+                # a caller asking "which suite was this?" has no other honest
+                # source. ``server`` names an app since the per-app topology
+                # landed, and the trace carries no suite field at all.
+                "coordinate": tuple(entry.coordinate),
                 **entry.native,
             }
     return outcomes
