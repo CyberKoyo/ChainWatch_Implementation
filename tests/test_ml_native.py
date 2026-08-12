@@ -72,3 +72,51 @@ def test_outcomes_are_read_off_the_manifest_on_disk(tmp_path):
     # The whole coordinate survives the join: nothing else can answer "which
     # suite was this?" now that `server` names an app rather than a suite.
     assert outcomes["s1"]["coordinate"][0] == "agentdojo"
+
+
+def _write_corpus(tmp_path):
+    """Two sessions, one natively valid, in the trace schema both readers share."""
+    import json
+
+    rows = []
+    for session, label, rules in (("s_ok", "attack", ["R3"]),
+                                  ("s_refused", "attack", [])):
+        for call in (1, 2):
+            vector = [0.0] * 20
+            vector[0] = 1.0
+            rows.append({"session": session, "label": label,
+                         "source": "agentdojo-gpt4omini", "call": call,
+                         "v": vector, "rules": rules, "severity": "NONE",
+                         "stage": 1, "server": "slack-slack"})
+    path = tmp_path / "traces.jsonl"
+    path.write_text("\n".join(json.dumps(row) for row in rows), encoding="utf-8")
+    return path
+
+
+def test_the_session_allowlist_reaches_both_the_baseline_and_the_matrix(tmp_path):
+    from chainwatch.ml.dataset import build
+    from chainwatch.ml.evaluate import AGENTDOJO_GPT4OMINI, rule_baseline
+
+    path = _write_corpus(tmp_path)
+
+    everything = rule_baseline(path, AGENTDOJO_GPT4OMINI)
+    primary = rule_baseline(path, AGENTDOJO_GPT4OMINI, sessions={"s_ok"})
+    assert everything.n_attack == 2
+    assert primary.n_attack == 1, "the refused attack is excluded, never relabelled"
+
+    dataset = build(path, groups=("current",), sources=("agentdojo-gpt4omini",),
+                    sessions={"s_ok"})
+    assert set(dataset.sessions.tolist()) == {"s_ok"}
+
+
+def test_an_empty_allowlist_is_not_the_same_as_no_allowlist(tmp_path):
+    """None means 'every session'; an empty set means 'nothing survived selection'.
+
+    Conflating them would silently turn a manifest that matched nothing into a run
+    over the whole corpus, published under the native-valid heading.
+    """
+    from chainwatch.ml.evaluate import AGENTDOJO_GPT4OMINI, rule_baseline
+
+    path = _write_corpus(tmp_path)
+    assert rule_baseline(path, AGENTDOJO_GPT4OMINI, sessions=set()).n_attack == 0
+    assert rule_baseline(path, AGENTDOJO_GPT4OMINI, sessions=None).n_attack == 2

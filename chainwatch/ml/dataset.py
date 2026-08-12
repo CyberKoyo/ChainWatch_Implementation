@@ -323,6 +323,7 @@ def build(
     groups: Iterable[str] = GROUPS,
     config: RuleConfig | None = None,
     sources: Iterable[str] | None = None,
+    sessions: Iterable[str] | None = None,
 ) -> Dataset:
     """Assemble a :class:`Dataset` from one trace file or several read as one corpus.
 
@@ -339,6 +340,11 @@ def build(
     config = config or RuleConfig()
     model = build_prior_model() if "hmm" in groups else None
     keep = set(sources) if sources is not None else None
+    # ``None`` means every session; an *empty* collection means nothing survived
+    # selection, and the two must not collapse into each other -- a manifest that
+    # matched nothing would otherwise produce a whole-corpus run published under a
+    # native-valid heading.
+    allowed = set(sessions) if sessions is not None else None
 
     rows: list[np.ndarray] = []
     labels: list[int] = []
@@ -351,6 +357,8 @@ def build(
 
     for calls in load_sessions(path):
         if keep is not None and str(calls[0].get("source")) not in keep:
+            continue
+        if allowed is not None and str(calls[0].get("session")) not in allowed:
             continue
 
         vectors = [np.asarray(entry["v"], dtype=np.float64) for entry in calls]

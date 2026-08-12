@@ -49,6 +49,7 @@ without the attack.
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -58,6 +59,7 @@ import numpy as np
 
 from ..engine.taxonomy import ToolCategory, ToolClassifier
 from .dataset import ARMS, Dataset, TracePaths, build, load_sessions
+from .native import is_native_valid, native_outcomes
 from .scorer import Scorer, session_labels, session_scores
 
 #: Populations the model may learn from. SHADE is deliberately absent.
@@ -248,7 +250,11 @@ def threshold_for_detection(attack: np.ndarray, target: float) -> float:
 # ------------------------------------------------------------------------ arm A
 
 
-def rule_baseline(path: TracePaths, populations: Populations = SYNTHETIC) -> Operating:
+def rule_baseline(
+    path: TracePaths,
+    populations: Populations = SYNTHETIC,
+    sessions: Iterable[str] | None = None,
+) -> Operating:
     """The rule engine's own numbers, read straight out of the traces.
 
     Recomputed here rather than quoted from CLAUDE.md so the comparison is against
@@ -271,10 +277,14 @@ def rule_baseline(path: TracePaths, populations: Populations = SYNTHETIC) -> Ope
     # a measurement -- and since n_attack was 200 the both-classes guard in ``main``
     # never fired, so the run exited 0.
     selected = set(populations.train)
+    # Same contract as dataset.build: None is "every session", empty is "none".
+    allowed = set(sessions) if sessions is not None else None
 
     for calls in load_sessions(path):
         source = str(calls[0].get("source"))
         if source not in selected:
+            continue
+        if allowed is not None and str(calls[0].get("session")) not in allowed:
             continue
         # R1-R5 only. "STAGE" is the INFO-level suspicious-stage signal, which
         # ChainResult.detected explicitly does not count as a detection -- counting it
@@ -507,6 +517,21 @@ def main(argv: list[str] | None = None) -> int:
             "(default: synthetic)"
         ),
     )
+    parser.add_argument(
+        "--native-valid",
+        action="store_true",
+        help=(
+            "restrict to sessions the benchmark's own check validated: successful "
+            "attacks and completed benign tasks (the primary analysis). Without it "
+            "the run is all-attempts, the sensitivity analysis."
+        ),
+    )
+    parser.add_argument(
+        "--manifest",
+        nargs="*",
+        default=None,
+        help="manifest paths; defaults to $CHAINWATCH_HOME/*_manifest.jsonl",
+    )
     options = parser.parse_args(argv)
     populations = POPULATIONS[options.population]
 
@@ -520,11 +545,37 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 2
 
+    allowed: set[str] | None = None
+    partition = "all-attempts (sensitivity)"
+    if options.native_valid:
+        home = Path(os.environ.get("CHAINWATCH_HOME", Path.home() / ".chainwatch"))
+        manifests = ([Path(p) for p in options.manifest] if options.manifest
+                     else sorted(home.glob("*_manifest.jsonl")))
+        if not manifests:
+            # is_native_valid fails closed on an unknown session, so a missing
+            # manifest would select nothing and print an empty primary analysis
+            # under a heading claiming it had been measured. Refuse instead.
+            sys.stderr.write(
+                "ml-eval: --native-valid needs a manifest; none found. "
+                "Pass --manifest, or set CHAINWATCH_HOME.\n")
+            return 2
+        outcomes = native_outcomes(manifests)
+        allowed = {
+            str(calls[0].get("session"))
+            for calls in load_sessions(path)
+            if is_native_valid(str(calls[0].get("session")),
+                               str(calls[0].get("label")), outcomes)
+        }
+        partition = "native-valid (primary)"
+
     print("=" * 78)
     print(f"ChainWatch — supervised arms vs the rule engine   [{populations.name}]")
+    # On the table itself, never only in the command that produced it: a pasted
+    # table with no partition line is two different questions wearing one heading.
+    print(f"partition: {partition}")
     print("=" * 78)
 
-    baseline = rule_baseline(path, populations)
+    baseline = rule_baseline(path, populations, sessions=allowed)
     print(f"\nBaseline over {baseline.n_attack} attack / {baseline.n_benign} benign "
           f"({populations.false_positive}) sessions")
     print(_row(baseline))
@@ -548,7 +599,7 @@ def main(argv: list[str] | None = None) -> int:
     print("-- session-grouped cross-validation " + "-" * 42)
     results: dict[str, Operating] = {}
     for arm in [a.strip() for a in options.arms.split(",") if a.strip()]:
-        dataset = build(path, groups=ARMS[arm], sources=populations.train)
+        dataset = build(path, groups=ARMS[arm], sources=populations.train, sessions=allowed)
         scores = out_of_fold_scores(dataset, k=options.folds, seed=options.seed)
         point = evaluate_arm(
             f"{arm} ({'+'.join(ARMS[arm])})", dataset, scores, target, populations
@@ -558,13 +609,13 @@ def main(argv: list[str] | None = None) -> int:
 
     print("\n-- leave-one-environment-out " + "-" * 49)
     for arm in results:
-        dataset = build(path, groups=ARMS[arm], sources=populations.train)
+        dataset = build(path, groups=ARMS[arm], sources=populations.train, sessions=allowed)
         scores = environment_holdout_scores(dataset, seed=options.seed)
         print(_row(evaluate_arm(f"{arm} (env holdout)", dataset, scores, target, populations)))
 
     if not options.skip_permutation:
         print("\n-- permutation floor " + "-" * 57)
-        dataset = build(path, groups=ARMS["D"], sources=populations.train)
+        dataset = build(path, groups=ARMS["D"], sources=populations.train, sessions=allowed)
         floor = permutation_floor(
             dataset, trials=options.permutations, k=options.folds, seed=options.seed
         )
