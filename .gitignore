@@ -13,3 +13,6 @@ agentdojo/
 InjecAgent/
 OpenAgentSafety/
 Agent-SafetyBench/
+docs/presentation/
+docs/superpowers/
+.vscode/

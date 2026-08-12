@@ -355,8 +355,10 @@ moved every arm number for a non-modelling reason. Verified inert on the v2 corp
 it reproduced §6's all-attempts figures exactly.
 
 **Arm E's v2 collapse is not contradicted here.** The 70.6% was the *native-valid* environment
-holdout; v2's all-attempts arm E was already 1.0%. The native-valid arms run has not been repeated
-on v3, so nothing is yet claimed about whether the per-call shortcut reappeared.
+holdout; v2's all-attempts arm E was already 1.0%. At the time this section was written the
+native-valid arms run had not been repeated on v3, so nothing was claimed about whether the
+per-call shortcut reappeared. **It has since been repeated — see §10.7.3**, where the collapse
+reproduces at 47.4% cross-validated and 73.7% held out.
 
 ## 10.6 Two defects found and fixed while preparing the capture
 

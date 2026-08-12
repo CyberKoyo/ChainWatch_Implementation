@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "workspace": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "workspace",
@@ -10,12 +10,12 @@
         "--source", "bizops",
         "--log-args",
         "--",
-        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        ".venv/bin/python",
         "-m", "benchmark_bridge.env_mcp_server", "--env", "workspace"
       ]
     },
     "banking": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "banking",
@@ -24,12 +24,12 @@
         "--source", "bizops",
         "--log-args",
         "--",
-        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        ".venv/bin/python",
         "-m", "benchmark_bridge.env_mcp_server", "--env", "banking"
       ]
     },
     "travel": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "travel",
@@ -38,12 +38,12 @@
         "--source", "bizops",
         "--log-args",
         "--",
-        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        ".venv/bin/python",
         "-m", "benchmark_bridge.env_mcp_server", "--env", "travel"
       ]
     },
     "spam_filter": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "spam_filter",
@@ -52,7 +52,7 @@
         "--source", "bizops",
         "--log-args",
         "--",
-        "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+        ".venv/bin/python",
         "-m", "benchmark_bridge.env_mcp_server", "--env", "spam_filter"
       ]
     }

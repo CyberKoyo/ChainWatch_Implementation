@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "gmail": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "gmail",
@@ -13,7 +13,7 @@
       ]
     },
     "gcalendar": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "gcalendar",
@@ -25,7 +25,7 @@
       ]
     },
     "gdrive": {
-      "command": "/home/hismajesty/Documents/MCP_ML_Firewall/Firewall_Implementation/.venv/bin/python",
+      "command": ".venv/bin/python",
       "args": [
         "-m", "chainwatch",
         "--server", "gdrive",
