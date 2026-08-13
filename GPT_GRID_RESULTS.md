@@ -378,9 +378,9 @@ Both in `scripts/archive_gpt_captures.py`, both caught before anything was moved
 
 Note 31's species both times: a name or a glob that asserts a property instead of deriving it.
 
-## 10.7 Five offline measurements over the v3 corpus (2026-08-11)
+## 10.7 Six offline measurements over the v3 corpus (2026-08-11)
 
-All five read the **v3** corpus already on disk — 452 sessions, 1924 calls — and cost **zero API
+All six read the **v3** corpus already on disk — 452 sessions, 1924 calls — and cost **zero API
 requests**. Nothing here changed a rule, a prior, a threshold or a slide; the decision to record
 rather than act was taken before any of them ran. Every number is v3 and is never pooled with v2.
 
@@ -655,3 +655,85 @@ against 10.5% there. Fold assignment is order-sensitive at the third decimal (ar
 0.984/0.985 between two runs differing only in session ordering), so AUC is quoted to three digits
 and no comparison rests on the last one. Per §8's note 42 every cell remains a single Bernoulli
 draw off one executor and one payload family. **Nothing was changed in response.**
+
+### 10.7.6 The inverted pin — detection at the rule engine's own false-positive budget
+
+`scripts/inverted_pin.py`. Every published table pins each arm to arm A's **detection** and reads
+off false positives (`chainwatch/ml/evaluate.py:13-15`, `threshold_for_detection` at `:241`). That
+is the stated hypothesis and it is the right one for the paper. It leaves the mirror unmeasured, and
+the omission has a consequence: **no table in this document can answer "does the learned model
+detect more than the rule engine?"**, because detection is a pinned constant in all of them. §10.5's
+63.7 → 66.8% spread across arms is threshold quantization — `threshold_for_detection` returns the
+lowest threshold achieving *at least* the target — not four models detecting different amounts.
+
+`pin_at_fp` is that function's mirror: fix the false-positive budget, return the highest detection
+admissible under it. It sweeps every distinct session score as a candidate rather than solving a
+quantile, because session scores are discrete and heavily tied and a quantile can land inside a tie
+group and report a rate the threshold does not deliver — the case
+`test_a_tie_at_the_boundary_cannot_buy_detection` pins.
+
+**Arm A has two predicates and they must both be reported.** `rule_baseline` counts any of R1–R5
+(`evaluate.py:289-292`) — the loose predicate the arms table pins to. `critical_baseline` counts a
+session in which any call was CRITICAL, which on this corpus is R3 alone since R5 is 0/0 (§10.2).
+That is §10.3's 74/76 and 4/38, and the script reproduces both exactly, which is the cross-check
+that says the predicate is the one §10.3 used.
+
+**Native-valid, n = 76 attack / 38 benign. Budget = arm A's CRITICAL FP, 10.5%:**
+
+| arm | CV detection | suite-holdout detection |
+|---|---|---|
+| **A (CRITICAL), the deployed engine** | **97.4%** (74/76) | — |
+| B current+window | **100%** (76/76) | **100%** @ 5.3% FP |
+| D everything | **100%** | **100%** |
+| C hmm+rules | 84.2% | 92.1% |
+| E current only | 84.2% | **35.5%** |
+
+**All-attempts, n = 355 / 97. Budget = arm A's CRITICAL FP, 7.2%:**
+
+| arm | CV detection | suite-holdout detection |
+|---|---|---|
+| **A (CRITICAL)** | **39.4%** | — |
+| B | 91.0% | 91.5% |
+| D | 91.0% | 91.0% |
+| E | 93.0% | 93.0% |
+| C | 86.8% | 83.7% |
+
+Three readings, in order of how much they license:
+
+1. **Arm A is dominated on both axes at once, and the second axis is what says why.** At matched
+   false positives B and D detect 76/76 against 74/76; at matched detection (§10.7.3) they pay 0.0%
+   against 55.3%. Native-valid cross-validated, arm B's raw accuracy is **114/114** against arm A's
+   108/114 — perfect separation, AUC 1.000. **Do not read that as detecting the attack.** The
+   arithmetic on the other partition forbids it: B flags **91.0% of 355** all-attempts sessions,
+   ≈323, of which only **76** are successful attacks — so **≥247 of its positives are refusals**,
+   roughly 88% of the 279. A model detecting subversion caps near 21.4% here. B is detecting **that
+   an injection was served**, not that the agent acted on it.
+2. **Which is also why the native-valid number is perfect.** That partition's benign class is
+   exactly the clean-environment sessions, so "was a payload present" and "is this the attack class"
+   are the same question there, and the payload sits verbatim in a tool response that dim 13 fires
+   on 27/27 (CLAUDE.md §15). Near-perfect separation is available without any sequential reasoning.
+   Not a Phase 8 leak — the permutation floor is 0.494 and suite-holdout FP is 0.0%, so the label
+   carries real signal — but it is signal about **the environment**, not about the trajectory. The
+   two components answer different questions, and only the rule engine attempts *did data leave, in
+   a chain*. **"B and D catch both `slack` misses" is therefore true and nearly vacuous**: they
+   would flag those sessions had the agent refused.
+3. **Arm E splits the two directions.** It ties B and D at 84.2% cross-validated and falls to
+   **35.5%** held out by suite — the same collapse §10.7.3 and §10.7.5 report on the false-positive
+   axis, now visible on the detection axis. C is the other loser at 92.1%. The arms that see the
+   session generalise across environments; the per-call arm does not, whichever axis is pinned.
+   Note this does *not* rescue reading 1: generalising better at recognising a served payload is
+   still recognising a served payload.
+
+**What this does not license.** No threshold here was written down before the data existed, so
+unlike §10.2's R2 gate this authorises nothing — not a rule change, not a default, not a claim about
+what should ship. It is descriptive, the same standing as §10.7.1's G2. **The published comparison
+is still §10.7.3's** — false positives at matched detection, where B and D pay 0.0% against arm A's
+55.3%. This adds the other axis to the same finding; it is not a second discovery.
+
+**Quantization binds on top of that.** At n=38 benign the budget moves in steps of 1/38 = **2.6
+points**, so "pinned at 10.5%" means "at most 4 benign sessions" and neighbouring budgets are
+indistinguishable; at n=97 the step is 1.0%. Combined with note 42 — every cell a single Bernoulli
+draw — the two-session detection gap is not a rate comparison even before reading 1's
+what-is-being-detected objection is applied to it. `--self-check` re-derives the detection-pinned rows
+and refuses the run unless they reproduce §10.5 and §10.7.3; it passed. Zero API requests.
+**Nothing was changed in response.**
