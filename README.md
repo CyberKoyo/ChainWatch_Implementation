@@ -1,8 +1,12 @@
 # ChainWatch
 
-**Sequential, ML-based detection for multi-step MCP attacks — layered underneath [`mcpwall`](https://mcpwall.dev).**
+[![tests](https://github.com/CyberKoyo/ChainWatch_Implementation/actions/workflows/tests.yml/badge.svg)](https://github.com/CyberKoyo/ChainWatch_Implementation/actions/workflows/tests.yml)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
-An implementation of [arXiv:2607.19432v1](https://arxiv.org/html/2607.19432v1), *"ChainWatch: A Kill
+**Sequential, ML-based detection for multi-step MCP attacks — layered underneath
+[`mcpwall`](https://mcpwall.dev).**
+
+An implementation of [arXiv:2607.19432v1](https://arxiv.org/abs/2607.19432), *"ChainWatch: A Kill
 Chain-Aligned Sequential Detection Framework for Multi-Step Attacks in MCP-Based AI Agent Systems"*
 (Narayan, Jyoti & Singh, 2026).
 
@@ -48,7 +52,7 @@ passed per-call inspection — matching the paper's adversary model (§III-A).
 └──────┬────────────────────────┬──────────────────────────────────────────┘
        │ unix socket            │ stdio JSON-RPC
 ┌──────▼──────────────────┐  ┌──▼───────────────────────────────────────────┐
-│  chainwatch daemon      │  │  Real MCP server  /  AgentLAB env bridge     │
+│  chainwatch daemon      │  │  Real MCP server  /  benchmark env bridge    │
 │   one HMM               │  └──────────────────────────────────────────────┘
 │   one k=10 window       │
 │   shared by ALL servers │   ← this is what makes cross-server detection
@@ -117,6 +121,10 @@ in and updates session state for subsequent calls.
 | R4 | stage jumps ≥2 positions in one step | WARNING | no |
 | R5 | CONFIGURE call at stage ≥4 | **CRITICAL** | **yes** |
 
+Two of these have measured problems, reported below rather than papered over: **R2 fails its own
+pre-registered false-positive threshold**, and **R5 has never been measured against legitimate
+traffic**, because no published benchmark used here exposes a CONFIGURE tool.
+
 ---
 
 ## Repository layout
@@ -125,32 +133,33 @@ in and updates session state for subsequent calls.
 chainwatch/
   engine/              pure functions — no I/O, no MCP knowledge, portable
     taxonomy.py        tool name → Tool Category; parameter sensitivity scoring
-    features.py        the 20-dim vector; two-phase extraction; session state
+    features.py        the 20-dim vector; two-phase extraction; session state; Provenance
     hmm.py             factored emissions, log-space forward/backward, Viterbi, Baum-Welch
     model.py           design-spec priors for A, B, pi — generated from §IV-C's constraints
-    rules.py           R1–R5
+    rules.py           R1–R5 and RuleConfig
     session.py         sliding window k=10, step threshold m=5
     alerts.py          severity + block decision
   proxy/               stdio JSON-RPC proxy; spawns the child server after `--`
   daemon/              unix-socket session daemon (cross-server state)
-  models/prior.json    serialized priors
-  cli.py               proxy | daemon | check | train | replay | eval | capture
+  capture/             pinned-model executor used for benchmark capture
+  ml/                  the supervised comparison arms; optional [ml] extra
+  models/              trained_full.json, trained_transitions.json
+  audit.py             JSON Lines trace writer
+  cli.py               check | daemon | train | ml-train | ml-eval
+                       (bare argv falls through to the proxy)
 
-benchmark_bridge/      bridges the vendored AgentLAB, SHADE, and SafetyBench data
-  safetybench.py       Agent_SafetyBench adapter (BaseEnv subclass + paired .json schema)
-  shade_arena.py       SHADE_Arena adapter (167 of the 200 chains)
-  env_mcp_server.py    exposes an environment as a real MCP stdio server
-  agentlab_replay.py   drives 200 verified AgentLAB attack chains through the full stack
-  agentlab_benign_gen.py synthesizes the legacy matched benign negative class
+benchmark_bridge/      AgentLAB replay, plus SHADE_Arena and Agent_SafetyBench adapters
+agentdojo_bridge/      AgentDojo (office domain): published utility()/security(), verbatim
+                       injection payloads, per-app server topology
+injecagent_bridge/     InjecAgent (developer domain): data/*.json only, src/ never imported
 
-tests/
-  test_scenarios.py    the paper's five §V-B scenarios — the conformance gate
-  test_features.py     20-dim contract, categories, sensitivity, OC detectors
-  test_hmm.py          Viterbi vs brute force, EM monotonicity, prior constraints
-  test_rules.py  test_proxy.py
+scripts/               capture drivers, recipe generators, offline measurement tools
+docs/                  development-notes.md, traffic_recipes.md, generated recipe files
+tests/                 461 tests; test_scenarios.py is the conformance gate
 
-CLAUDE.md              the living spec — authoritative when it and the code disagree
-docs/paper.txt         local copy of the paper
+CLAUDE.md                    the specification: ambiguities, priors, rules, measurements
+GPT_GRID_RESULTS.md          full measurement detail
+docs/development-notes.md    42 numbered notes, cited by number from code comments
 ```
 
 `engine/` deliberately knows nothing about MCP, sockets, or files. That keeps it unit-testable in
@@ -169,14 +178,16 @@ jumps >2 unlikely, backward mass retained) rather than hardcoding 36 opaque numb
 from Table I's observable-features column. Every value is a prior meant to be replaced by
 `chainwatch train` once real traces exist.
 
-**These priors reproduce all five of the paper's §V-B scenarios exactly** — see the conformance gate.
+**These priors reproduce all five of the paper's §V-B scenarios exactly** — exact stage labels and
+exact rule/call pairs — and the labels survive ±5% perturbation of every prior across 40/40 trials.
+That test is the conformance gate.
 
 ---
 
 ## Quick start
 
 ```bash
-python3 -m venv .venv && .venv/bin/pip install numpy pytest pyyaml
+python3 -m venv .venv && .venv/bin/pip install numpy pyyaml pytest
 
 .venv/bin/pytest tests/ -v          # conformance gate lives in test_scenarios.py
 ```
@@ -187,70 +198,171 @@ Wrap a real server (ChainWatch inside mcpwall):
 { "mcpServers": { "filesystem": { "command": "npx", "args": [
     "-y", "mcpwall", "--",
     "python", "-m", "chainwatch", "--",
-    "npx", "-y", "@modelcontextprotocol/server-filesystem", "/home/you/projects"
+    "npx", "-y", "@modelcontextprotocol/server-filesystem", "/path/to/projects"
 ]}}}
 ```
 
 ```bash
-.venv/bin/python -m chainwatch daemon        # cross-server state; needed for R2
-.venv/bin/python -m benchmark_bridge.agentlab_replay --all
+.venv/bin/python -m chainwatch daemon        # cross-server state; needed for R2 and dim 9
+.venv/bin/python -m chainwatch check --input '{"jsonrpc":"2.0",...}'   # 0 allow / 1 block / 2 error
 .venv/bin/python -m chainwatch train --traces ~/.chainwatch/traces/*.jsonl --iters 50
 ```
 
+### Vendored benchmarks
 
+The capture and replay routes read benchmark checkouts that are **not redistributed here** and are
+gitignored. Clone them into the repo root yourself if you want those routes:
+
+| directory | source | how it is used |
+|---|---|---|
+| `agentdojo/` | [AgentDojo](https://github.com/ethz-spylab/agentdojo) (Debenedetti et al., NeurIPS 2024) | editable install; imported only from `agentdojo_bridge/` |
+| `InjecAgent/` | [InjecAgent](https://github.com/uiuc-kang-lab/InjecAgent) (Zhan et al., ACL 2024) | **data only** — `data/*.json` read, `src/` never imported |
+| `AgentLAB/` | [AgentLAB](https://github.com/TanqiuJiang/AgentLAB) | 200 verified attack chains; contains SHADE_Arena and Agent_SafetyBench |
+
+Without them five test modules fail or skip; **the other 379 tests pass on numpy + pyyaml alone**,
+which is exactly what CI runs.
 
 ---
 
-## Validation
+## Results
 
-The paper admits it has no data (§V-A: *"data that no existing benchmark provides"*). This repo uses
-[AgentLAB](https://github.com/TanqiuJiang/AgentLAB), which ships `STAC_gen`/`STAC_eval` — STAC being
-the paper's own ref [5] — plus 200 verified malicious tool chains and 700+ executable environment
-simulators.
+The paper admits it has no data (§V-A: *"data that no existing benchmark provides"*). The primary
+evidence here comes from **AgentDojo**, whose tasks, environments, injection payloads and scoring
+functions are all published, run against a pinned `gpt-4o-mini-2024-07-18` executor.
 
-Those chains are *plans*, not MCP traces: no responses, no timestamps, no server attribution. Parsed
-statically they yield only 10 of 20 dimensions. The replay harness executes them against real MCP
-servers so TF and OC become extractable and the full vector is live.
+**Both classes come off one generator** — same published task, same executor, same environment, same
+system prompt, differing only by whether the injection payload is served into the environment's data.
+That design exists because an earlier synthetic corpus leaked its label through argument content; see
+`docs/development-notes.md`, "Phase 8".
 
-### Results
+452 of 452 coordinates captured; 1924 tool calls; total spend $0.4417.
 
-200 verified attack chains + 200 synthesized benign chains, replayed through the real interceptor
-against real environment simulators, using the design-spec priors:
+### Two denominators, both required
 
-| shape | n | detected | blocked |
-|---|---|---|---|
-| read-then-network (R3's target) | 90 | **74.4%** | **67.8%** |
-| no outbound step at all | 98 | 10.2% | 0% |
-| **benign (negative class)** | 200 | **0.0%** | **0.0%** |
+| | native-valid — *attacks that worked* | all-attempts — *injected environments* |
+|---|---|---|
+| attack sessions | 76 (published `security()`) | 355 |
+| **detected** | **74/76 = 97.4%** | 39.4% |
+| benign false positives | 4/38 = 10.5% | 7.2% |
 
-The aggregate over all 200 attack chains is 38.5% detected / 30.5% blocked. It is lower than the
-subset figure because much of the AgentLAB corpus is harmful *content* distribution — author a
-payload, attach it, send it — which has no upstream data flow and no kill-chain progression for a
-sequential detector to see. Chains also average 2.8 calls against a six-stage model.
+Native attack success rate is **21.4%** — most served injections never became attacks, because the
+model refused. Reporting only the right column understates detection; reporting only the left hides
+that the firewall also fires on attempts that went nowhere. **Both, always.**
 
-Unsupervised Baum-Welch over these traces did **not** improve on the priors: transitions-only
-training dropped the target subset to 58.9%, and full EM bought aggregate recall at the cost of
-7.5% false positives. §IV-C anticipates estimation from *labelled* traces; 400 unlabelled sessions
-of median length 3 are not that.
+Every missed successful attack is `slack` — 2 on this grid, 8 on the previous one, the same invariant
+across two independent draws. Both current misses are one injection task whose failing R3 conjunct is
+the `chained` dimension, because the URL pattern requires a scheme and that payload's phishing link
+has none.
+
+### Per rule
+
+| | attack (n=355) | benign (n=97) |
+|---|---|---|
+| **R2** | **41.1%** | **29.9%** |
+| R1 / R3 / R4 | 12.7 / 41.1 / 58.9% | 11.3 / 17.5 / 25.8% |
+| R5 | **0%** | **0%** |
+
+**R2 fails a threshold written before the capture ran** — *fire on ≥20% of benign sessions and it is a
+false-positive engine on legitimate multi-service work*. Measured 29.9%. Isolated inside the same
+sessions, 10.3% of benign sessions fire R2 *and nothing else*, against 4.5% of attack sessions: **R2
+buys 4.5 points of attack coverage for 10.3 points of benign noise.**
+
+That rate is a property of the rule **and the declared topology**. One MCP server per suite puts R2
+at 0.0% in both classes; splitting a workspace into its email, calendar and drive apps raises it.
+Supportable: *"R2 fires on 29.9% of benign sessions under a three-app workspace topology."* Not
+supportable: *"R2 has a 29.9% false-positive rate."*
+
+**R5 is 0/0 because the published suites expose no CONFIGURE tool at all.** A candidate source for
+that missing population (OpenAgentSafety) was measured against a pre-registered threshold, failed it,
+and no bridge was built. The gap is open and labelled rather than filled with weaker evidence.
+
+### Rules versus learned models
+
+Arms B–E are one XGBoost (`max_depth=3, n_estimators=120, learning_rate=0.08`) over different feature
+groups; **arm A is the rule engine itself.** Pinned to arm A's detection, on the native-valid split:
+
+| arm | detection | FP | AUC | leave-one-environment-out FP |
+|---|---|---|---|---|
+| A rules | 91.8% | 17.6% | — | — |
+| B current + window | 93.2% | **0.0%** | 0.997 | 5.9% |
+| C hmm + rules | 91.8% | 23.5% | 0.928 | 29.4% |
+| D everything | 91.8% | **0.0%** | 0.998 | 5.9% |
+| E current call only | 94.5% | **32.4%** | 0.876 | **70.6%** |
+| permutation floor | | | **0.478** | |
+
+**Arm E's collapse is the evidence against another leak.** A greedy depth-3 learner finds a per-call
+shortcut immediately when one exists — in the earlier synthetic corpus it found one at a 121× gap.
+Here the per-call arm is the *worst*, and only the window features rescue it. The signal is
+sequential, which is this project's own thesis supported by data rather than assumed.
+
+Arm C is dominated by arm A while holding strictly more information: the HMM posteriors and rule
+firings compress worse than the window aggregates beneath them, and add nothing on top of them.
+
+Inverting the pin — fixing the false-positive budget instead of the detection rate — changes the
+headline: at arm A's CRITICAL budget, B and D detect 76/76 against the rule engine's 74/76. But B
+also flags 91.0% of all-attempts sessions, of which only 76 succeeded, so **most of its positives are
+refusals**. B recognises that *an injection was served*, not that the agent was subverted. Real
+signal, about the environment rather than the trajectory.
+
+**Arm A remains the deployable artifact**: no training data, no drift exposure. The arms are an upper
+bound on extractable signal, not a shipping recommendation.
+
+### Cost
+
+**3.9 ms per call at p50, 50 ms at p99, 85 ms max.** The Viterbi decode is the largest single stage
+(610 µs), but 40% of the total is provenance and output-token bookkeeping, and per-call cost grows
+1.9× from the first calls of a session to the sixth and beyond, since the window and the
+remembered-span store only grow.
+
+### Legacy regression, reported separately
+
+The AgentLAB replay (200 static attack chains against two synthesized benign populations) predates
+the current primary corpus, and its two classes come off different generators. It is kept as a
+regression diagnostic and **never pooled** with the results above: attack detection 47.5% / blocking
+39.0%, benign detection/blocking 19.0% / 9.0%.
+
+**An earlier revision of this README reported 0.0% false positives for that benign class. That number
+was an artifact and is retracted** — it was measured against a benign class that never chained a
+read's output into an outbound call, which is R3's entire signature, so 0.0% was guaranteed before
+anything ran. The full account is in `docs/development-notes.md`, "Phase 7".
+
+---
+
+## Limitations
+
+- **One executor, one payload family, one benchmark.** Leave-one-environment-out holds all three
+  constant. Nothing here supports a claim about other models or other injection styles.
+- **Every grid cell is a single Bernoulli draw.** The previous grid measured 89.0% detection and this
+  one 97.4%; read them as two draws from one rate at n≈75, not as an improvement. Detection and false
+  positives rose *together* between them, which is the signature of resampling.
+- **The benign class under-completes**: 38 of 97 benign sessions achieved the published utility
+  check, so the false-positive rate is measured partly over sessions that did little.
+- **The injection-stage detector figure is partly in-sample.** The AgentDojo payload is a unit-test
+  fixture in this repo, so its 27/27 detection rate is real but is not a clean generalisation
+  measurement.
+- **R3 as specified cannot separate exfiltration from an assistant doing its job.** Search files,
+  then email what you found, is both. Recipient provenance narrows this; it does not close it.
+- **The developer-domain route returned no attack population**: 0/78 native attack success under
+  tool-role delivery, on one-call sessions that cannot satisfy R3 or R5 at all. Unavailable, not zero.
 
 ---
 
 ## Status
 
-| Phase | State |
+| Component | State |
 |---|---|
-| Feature Extraction Layer | complete, 42 tests |
+| Feature extraction layer | complete, 104 tests |
 | HMM stage classifier | complete, 22 tests |
-| Sequential Pattern Analyzer + §V-B gate | complete, 22 tests |
-| Proxy + daemon | complete, 24 tests |
-| AgentLAB replay harness | complete |
-| Train + evaluate | complete |
+| Sequential pattern analyzer + §V-B gate | complete, 40 tests |
+| Proxy + daemon | complete, 43 tests |
+| Benchmark bridges and capture | complete |
+| Supervised comparison arms | complete |
 
-**111 tests passing.** The conformance gate reproduces every stage label and rule firing the paper
-states for S1–S5, and the labels survive ±5% perturbation of every prior (40/40 trials).
+**461 tests collected; 460 pass with 1 skipped** — a held-out payload family, deselected by default
+so detection rules cannot be iterated against it, and run explicitly with `-m holdout`.
 
-See `CLAUDE.md` for the full spec, the two paper ambiguities found and how they were resolved, and
-per-phase verified-vs-assumed notes.
+For the specification, the four ambiguities found in the paper and how each was resolved, and the
+full current measurements, see [`CLAUDE.md`](CLAUDE.md).
 
 ## License
 

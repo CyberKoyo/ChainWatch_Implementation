@@ -36,7 +36,20 @@ agentdojo = ["agentdojo"]
 chainwatch = "chainwatch.cli:main"
 
 [tool.setuptools]
-packages = ["chainwatch", "chainwatch.engine", "chainwatch.proxy", "chainwatch.daemon", "chainwatch.ml", "chainwatch.capture", "benchmark_bridge"]
+packages = [
+    "chainwatch",
+    "chainwatch.engine",
+    "chainwatch.proxy",
+    "chainwatch.daemon",
+    "chainwatch.ml",
+    "chainwatch.capture",
+    # The three benchmark bridges. Omitting the last two made `pip install .`
+    # silently drop routes E and F -- the packages exist, import cleanly, and
+    # were simply never listed.
+    "benchmark_bridge",
+    "agentdojo_bridge",
+    "injecagent_bridge",
+]
 
 [tool.setuptools.package-data]
 chainwatch = ["models/*.json"]

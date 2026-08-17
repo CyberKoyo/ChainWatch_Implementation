@@ -2,17 +2,33 @@
 __pycache__/
 *.pyc
 *.egg-info/
+build/
+dist/
 .pytest_cache/
 traces/
 logs/
+
+# Vendored benchmark checkouts. Obtain them yourself -- see README, "Vendored
+# benchmarks". Together they are several GB and none of them is ours to ship.
 AgentLAB/
-CLAUDE.md*
-AGENT.md
-regular_data/
 agentdojo/
 InjecAgent/
 OpenAgentSafety/
 Agent-SafetyBench/
+regular_data/
+
+# The paper's full text carries the arXiv perpetual non-exclusive licence, which
+# grants arXiv the right to distribute it and does not extend that right to this
+# repository. Read it at https://arxiv.org/abs/2607.19432 instead.
+docs/paper.txt
+
+# Working files. CLAUDE.md itself IS tracked -- it is the spec a contributor
+# ports from. These are its scratch archives and per-session work records.
+CLAUDE.md.bak
+CLAUDE.md.presplit-*
+INJECTION_OBSERVABILITY.md
+AGENT.md
+
 docs/presentation/
 docs/superpowers/
 .vscode/

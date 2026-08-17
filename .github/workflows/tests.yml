@@ -1,0 +1,49 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  pytest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # The engine, proxy and daemon need numpy and pyyaml, and nothing else.
+      # That is the point of keeping chainwatch/engine/ dependency-free, so CI
+      # installs exactly what someone wrapping a real MCP server installs.
+      - name: Install core dependencies
+        run: python -m pip install --upgrade pip numpy pyyaml pytest
+
+      # Five modules exercise the vendored benchmark checkouts (AgentDojo's
+      # installed package, InjecAgent's data/*.json). Those clones are several
+      # GB, are not ours to redistribute, and are gitignored -- so they are
+      # absent here by design and their tests are deselected rather than left to
+      # fail. Everything they cover is reachable locally once the clones are in
+      # place; see README, "Vendored benchmarks".
+      #
+      # tests/test_ml.py needs the [ml] extra and skips itself via
+      # pytest.importorskip. The held-out payload family is deselected by
+      # tests/conftest.py and runs only under `-m holdout`, deliberately.
+      - name: Run the test suite
+        run: |
+          python -m pytest tests/ -q \
+            --ignore=tests/test_agentdojo_bridge.py \
+            --ignore=tests/test_injecagent_bridge.py \
+            --ignore=tests/test_recipe_generators.py \
+            --ignore=tests/test_capture_drivers.py \
+            --ignore=tests/test_injection_payloads.py
+
+      # The conformance gate is the reason this workflow exists: it asserts the
+      # exact stage labels and rule firings the paper states for S1-S5, from
+      # priors derived only from its Table I. Run it again on its own so a
+      # failure there is unambiguous in the log.
+      - name: Conformance gate (paper section V-B scenarios)
+        run: python -m pytest tests/test_scenarios.py -q
