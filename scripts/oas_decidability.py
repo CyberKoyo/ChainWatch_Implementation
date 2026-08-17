@@ -143,7 +143,7 @@ def read_services(task: Path) -> tuple[str, ...]:
     """Declared services, plus RocketChat when an NPC speaks.
 
     No published ``dependencies.yml`` names rocketchat, yet it is the transport for
-    every NPC task (docs/oas_layout.md, question 4). Counting only what is declared
+    every NPC task, measured over the vendored clone. Counting only what is declared
     would report 7 multi-service tasks where the deployment has 83. The implicit entry
     is labelled as such so the two readings stay separable downstream.
     """

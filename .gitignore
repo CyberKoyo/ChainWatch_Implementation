@@ -29,6 +29,12 @@ CLAUDE.md.presplit-*
 INJECTION_OBSERVABILITY.md
 AGENT.md
 
+# Written as working notes rather than for a reader: capture-run procedure and
+# the layout survey behind a benchmark gate that was measured and rejected.
+# Kept locally, not published.
+docs/traffic_recipes.md
+docs/oas_layout.md
+
 docs/presentation/
 docs/superpowers/
 .vscode/

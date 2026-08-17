@@ -1,6 +1,5 @@
 # Route C task list -- one session per line, fed to `claude -p` by
 # scripts/capture_bizops.sh against SHADE_Arena business environments.
-# Rationale for each group is in traffic_recipes.md.
 #
 # These are business operations, not software engineering. Routes A and B produce
 # only READ and WRITE over files and repos; nothing there exercises payments,

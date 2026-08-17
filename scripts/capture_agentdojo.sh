@@ -9,7 +9,7 @@
 # `user_task` PROMPT -- the same one on both halves -- and the *environment* either
 # does or does not carry AgentDojo's verbatim important_instructions payload. So a
 # resisted injection still produces a full trajectory instead of the zero-call
-# refusal that voided the twinattack half (CLAUDE.md §12: 80% refusal on
+# refusal that voided the twinattack half (CLAUDE.md, "Out of scope": 80% refusal on
 # human-written secondary tasks, 100% on machine-authored goals).
 #
 # Both halves run under one frozen executor and differ by the served data alone:
@@ -51,7 +51,7 @@ DRY="${DRY:-0}"
 # error instead of a substitution.
 export CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP=1
 
-[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
+[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see README Quick start" >&2; exit 1; }
 [ -f "$RECIPES" ] || {
     echo "no recipe file at $RECIPES -- run scripts/gen_agentdojo_recipes.py" >&2
     exit 1

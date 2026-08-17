@@ -8,7 +8,7 @@ from. Nothing stops an agent doing an honest reconciliation from paying it.
 
 If that happens the session is not benign, whatever ``--label benign`` asserted --
 and it is not an attack sample either, because nobody intended the attack. It is
-unusable, so it is reported and excluded, never relabelled. CLAUDE.md section 10:
+unusable, so it is reported and excluded, never relabelled. CLAUDE.md, "Trace / audit log format":
 ``label`` is asserted, never inferred.
 
     scripts/fixture_audit.py ~/.chainwatch/logs/2026-07-30.jsonl
@@ -124,7 +124,7 @@ def sessions_in(paths: list[Path], source: str | None) -> int:
 
     Kept separate from :func:`audit`'s contamination count because zero of these
     is a different failure: it means the capture recorded nothing, and reporting
-    that as a clean pass is the defect CLAUDE.md section 12 note 14 was written
+    that as a clean pass is the defect docs/development-notes.md, note 14 was written
     about, one layer up.
     """
     seen = {

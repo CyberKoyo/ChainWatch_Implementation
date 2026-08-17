@@ -4,7 +4,7 @@
 # one universe, and the attacker-planted entities sit in it alongside the ordinary
 # ones. A route C session that sends money to bank_transfer_2's IBAN has performed
 # that pair's secondary task; calling it benign would assert the opposite of what
-# happened, which is the failure CLAUDE.md section 10 forbids ("label is asserted,
+# happened, which is the failure CLAUDE.md, "Trace / audit log format" forbids ("label is asserted,
 # never inferred").
 #
 # Read by scripts/fixture_audit.py. A bizops session touching any token below is

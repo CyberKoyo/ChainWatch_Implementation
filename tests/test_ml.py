@@ -485,7 +485,7 @@ def test_gpt4omini_populations_do_not_pool_routes_or_claude_executor_rows():
 
 
 def test_adding_injection_populations_left_the_existing_ones_alone():
-    """Every measured figure in CLAUDE.md §12 belongs to these three."""
+    """Every measured figure in GPT_GRID_RESULTS.md belongs to these three."""
     assert POPULATIONS["synthetic"].train == TRAIN_SOURCES
     assert POPULATIONS["real"].train == ("bizops", "bizattack")
     assert POPULATIONS["twins"].train == ("twin", "twinattack")
@@ -516,7 +516,7 @@ def test_a_benign_task_and_its_injected_variant_never_cross_a_fold():
 
 def test_a_session_with_no_manifest_entry_groups_on_its_own_id(tmp_path):
     """Legacy populations must fold exactly as they did, or every number in
-    CLAUDE.md §12 stops being reproducible."""
+    GPT_GRID_RESULTS.md stops being reproducible."""
     from chainwatch.ml.dataset import build
 
     trace = tmp_path / "legacy.jsonl"

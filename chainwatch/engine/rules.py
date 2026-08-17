@@ -23,7 +23,7 @@ Stage 2 -- and yet section V-B states plainly that "R3 would fire at call 4".
 The reading that satisfies all three scenarios is that "high-stage" qualifies the
 NETWORK call. That is the default here (``r3_network_stage_min``). The strict
 literal reading is one config change away via ``r3_read_stage_min``.
-See CLAUDE.md section 3, ambiguity A1.
+See CLAUDE.md, ambiguity A1.
 """
 
 from __future__ import annotations

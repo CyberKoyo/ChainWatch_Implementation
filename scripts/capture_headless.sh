@@ -23,7 +23,7 @@ STATE="${CHAINWATCH_HOME:-$HOME/.chainwatch}"
 RECIPES="${1:-$ROOT/docs/recipes.txt}"
 REPEATS="${2:-1}"
 
-[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
+[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see README Quick start" >&2; exit 1; }
 [ -f "$RECIPES" ] || { echo "no recipe file at $RECIPES" >&2; exit 1; }
 
 mkdir -p "$STATE/logs" "$STATE/notes"

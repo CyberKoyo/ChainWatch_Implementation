@@ -14,7 +14,7 @@
 # What differs from the benign script, and why each difference is load-bearing:
 #
 #   * .mcp.bizattack.json asserts --label attack --source bizattack. Labels are
-#     asserted, never inferred (CLAUDE.md section 10): dataset.build treats any
+#     asserted, never inferred (CLAUDE.md, "Trace / audit log format"): dataset.build treats any
 #     label that is not "attack" as benign, so a mis-tagged run poisons the negative
 #     class silently.
 #
@@ -58,7 +58,7 @@ MCP_CONFIG="$ROOT/.mcp.$PROFILE.json"
 # under a different agent than its benign twin measures the agent, not the task.
 MODEL="${CHAINWATCH_MODEL:-claude-opus-5}"
 
-[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
+[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see README Quick start" >&2; exit 1; }
 [ -f "$RECIPES" ] || {
     echo "no recipe file at $RECIPES -- run scripts/gen_attack_recipes.py" >&2
     exit 1
@@ -111,7 +111,7 @@ TRACE="$STATE/logs/$(date -u +%F).jsonl"
 # project's CLAUDE.md documents the planted entities, names
 # docs/fixture_exclusions.txt and fixture_audit.py, and explains what route C is
 # for. Measured on the first attack smoke run: the agent declined and cited "this
-# repo's own fixture-contamination notes (CLAUDE.md §11, docs/fixture_exclusions.txt)"
+# repo's own fixture-contamination notes (docs/fixture_exclusions.txt)"
 # in its refusal. That is the firewall's own documentation reaching the subject of
 # the experiment.
 #

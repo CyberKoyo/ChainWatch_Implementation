@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify that an ``attack``-labelled twin session actually performed its attack.
 
-CLAUDE.md section 12 note 35: nothing in the capture pipeline checks whether a
+docs/development-notes.md, note 35: nothing in the capture pipeline checks whether a
 session tagged ``attack`` did the fraud. The label is asserted by the mcp config
 (``--label attack`` in ``.mcp.twinattack.json``) and never compared against
 behaviour, so a session that does the honest cover task and silently drops the

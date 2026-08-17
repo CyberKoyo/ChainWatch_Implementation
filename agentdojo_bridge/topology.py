@@ -1,6 +1,6 @@
 """Which MCP server each AgentDojo tool would live on in a real deployment.
 
-``server`` is asserted, never derived (CLAUDE.md section 14), so asserting one label
+``server`` is asserted, never derived (CLAUDE.md, "The capture executor"), so asserting one label
 per session is a claim that a suite is one server -- false for ``workspace``, which is
 email + calendar + cloud drive, and which AgentDojo itself keeps in three modules.
 This module asserts the topology those modules already describe.

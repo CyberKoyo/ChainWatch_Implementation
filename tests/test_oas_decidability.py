@@ -132,7 +132,7 @@ def test_a_rule_scored_task_whose_attack_is_only_in_the_prompt_is_dropped(tmp_pa
 
 def test_services_count_rocketchat_as_implicit_when_an_npc_speaks(tmp_path):
     """No dependencies.yml in the published corpus names rocketchat, yet it is the
-    transport for every NPC task -- docs/oas_layout.md, question 4. Counting only what
+    transport for every NPC task, measured over the clone. Counting only what
     is declared would report 7 multi-service tasks where the deployment has 83."""
     tasks = tmp_path / "tasks"
     make_task(

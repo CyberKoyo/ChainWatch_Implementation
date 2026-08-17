@@ -6,6 +6,11 @@
 **Sequential, ML-based detection for multi-step MCP attacks — layered underneath
 [`mcpwall`](https://mcpwall.dev).**
 
+> **This README is the documentation.** [`CLAUDE.md`](CLAUDE.md) is the agent- and contributor-facing
+> contract — feature indices, priors, invariants, commands — written to be loaded by a coding agent
+> rather than read for its findings. Everything a person needs is here; full measurement detail is in
+> [`GPT_GRID_RESULTS.md`](GPT_GRID_RESULTS.md).
+
 An implementation of [arXiv:2607.19432v1](https://arxiv.org/abs/2607.19432), *"ChainWatch: A Kill
 Chain-Aligned Sequential Detection Framework for Multi-Step Attacks in MCP-Based AI Agent Systems"*
 (Narayan, Jyoti & Singh, 2026).
@@ -154,8 +159,8 @@ agentdojo_bridge/      AgentDojo (office domain): published utility()/security()
 injecagent_bridge/     InjecAgent (developer domain): data/*.json only, src/ never imported
 
 scripts/               capture drivers, recipe generators, offline measurement tools
-docs/                  development-notes.md, traffic_recipes.md, generated recipe files
-tests/                 461 tests; test_scenarios.py is the conformance gate
+docs/                  development-notes.md, generated recipe files
+tests/                 464 tests; test_scenarios.py is the conformance gate
 
 CLAUDE.md                    the specification: ambiguities, priors, rules, measurements
 GPT_GRID_RESULTS.md          full measurement detail
@@ -179,8 +184,60 @@ from Table I's observable-features column. Every value is a prior meant to be re
 `chainwatch train` once real traces exist.
 
 **These priors reproduce all five of the paper's §V-B scenarios exactly** — exact stage labels and
-exact rule/call pairs — and the labels survive ±5% perturbation of every prior across 40/40 trials.
-That test is the conformance gate.
+exact rule/call pairs — and the labels survive ±5% perturbation of every prior across 40/40 trials:
+
+| Scenario | Call sequence | Expected stages | Expected rules |
+|---|---|---|---|
+| S1 Financial Fraud | `get_balance` → `list_payees` → `add_payee` → `transfer_funds` | 1, 2, 4, 6 | R4 @ 3, R3 @ 4 → CRITICAL |
+| S2 GitHub Data Heist | `list_repos` → `get_issue` → `read_file` → `create_PR` | 1, 3, 4, 6 | R3 @ 4 → CRITICAL |
+| S3 WhatsApp Rug-Pull | `send_message` → `get_fact` → `get_fact` → `redirect_all_messages` | 2, 2, 3, 6 | R4 + R3 → CRITICAL |
+| S4 Cross-Agent Escalation | `read_workspace_config` → `execute_agent_task` → `write_mcp_config` | 1, 3, 5 | R5 immediate → CRITICAL + blocked |
+| S5 Credential Harvest | `list_tools` → `read_env` → `read_ssh_config` → `post_to_webhook` | 1, 4, 4, 6 | R1 @ 2, R3 @ 4 → CRITICAL |
+
+`tests/test_scenarios.py` encodes these verbatim and asserts exact stage labels *and* exact
+rule/call pairs. It is the operational definition of "follows the specification", and it holds under
+all three settings of the recipient-provenance policy described below.
+
+Sensitivity is uneven and worth stating: at ±10% perturbation 30 of 40 trials still label every
+scenario correctly, and **S5 is always the first to break** — it is the only scenario requiring a
+three-stage jump, the transition class the paper itself calls unlikely.
+
+---
+
+## What the paper leaves ambiguous
+
+Tracing the paper's own §V-B scenarios against its §IV-D rule definitions surfaced two internal
+inconsistencies; implementing recipient provenance surfaced two more. Each resolution is forced by
+the paper's own text rather than invented, and each is reachable in config so the literal reading
+stays available.
+
+**A1 — whose stage is "high"?** R3 is defined as *"a high-stage READ followed within m steps by a
+NETWORK call carrying that data."* That reading holds for two of the paper's scenarios and fails for
+a third, where the only READs sit at stages 1 and 2 — yet the paper states R3 fires there. So
+"high-stage" must qualify the **NETWORK** call, not the READ. That satisfies all three at once.
+
+**A2 — a severity the rule table cannot produce.** The paper assigns R4 a WARNING, then says its
+rug-pull scenario raises a CRITICAL alert on an R4 firing. Resolved without touching the severity
+table: the same call is a chained NETWORK call at stage 6, so R3 fires too, and R3 is CRITICAL.
+
+**A3 — "that data" cannot be enforced.** R3's text binds the exfiltrated payload to the READ that
+produced it. The implementation deliberately does not, because in the paper's own fraud scenario the
+exfiltrated account number came from a *WRITE* response — bind them and R3 stops firing on a
+scenario the paper says it fires on. The loose reading is forced. Measured consequence: on real
+agent trajectories **90% of chained data came from a prior NETWORK response**, and since nearly every
+session contains a READ within the window, R3 reduces in practice to *"an outbound call at high
+stage whose arguments echo any earlier response."*
+
+**A4 — the rules never ask who the data is going to.** Not an inconsistency, an absence. R3 keys on
+the *shape* of an act — read something, send something — which is equally an assistant doing its
+job. So destination provenance rides alongside as a sidecar, never as a feature: is this recipient
+one that a clean response named, one the session introduced, or one never seen? It can only ever
+lower a severity, never raise one, so it cannot invent an alert. It released 20 benign chains for
+every 1 attack chain and changed detection not at all — **a precision mechanism, not a detection
+one.**
+
+The operative form of all four, with the config flags and the reasoning a reimplementation needs, is
+in [`CLAUDE.md`](CLAUDE.md).
 
 ---
 
@@ -219,8 +276,29 @@ gitignored. Clone them into the repo root yourself if you want those routes:
 | `InjecAgent/` | [InjecAgent](https://github.com/uiuc-kang-lab/InjecAgent) (Zhan et al., ACL 2024) | **data only** — `data/*.json` read, `src/` never imported |
 | `AgentLAB/` | [AgentLAB](https://github.com/TanqiuJiang/AgentLAB) | 200 verified attack chains; contains SHADE_Arena and Agent_SafetyBench |
 
-Without them five test modules fail or skip; **the other 379 tests pass on numpy + pyyaml alone**,
+Without them five test modules fail or skip; **the other 382 tests pass on numpy + pyyaml alone**,
 which is exactly what CI runs.
+
+All three are MIT licensed. This repo reproduces verbatim task text from each in `docs/recipes_*`;
+their copyright and permission notices are in [`NOTICE`](NOTICE), as MIT requires.
+
+### What ChainWatch cannot see
+
+Decisive if you are considering deploying it, and none of it is fixable from inside this project:
+
+- **Remote connectors execute on the vendor's side.** Hosted Gmail, Calendar and Drive integrations
+  never reach your machine, so no local proxy can observe them. A hard limit, not a gap to close.
+- **HTTP-transport MCP servers have no stdio pipe.** They need `npx mcp-remote <url>` in front of
+  them before anything can wrap them.
+- **`WebSearch` and `WebFetch` are native agent tools, not MCP.** They produce no ChainWatch-visible
+  traffic at all; web search is only observable through an MCP search server bridged to stdio.
+- **`--mcp-config` adds servers, it does not replace them.** An agent can reach an unproxied server
+  and produce no trace, so a session can look clean because it was never watched.
+  `--strict-mcp-config` is the structural fix.
+
+There is also nothing to mine retroactively: across 14 local agent transcripts, 532 recorded tool
+calls were Bash/Edit/Read/Write and **zero were MCP**. Observation requires deliberately routing an
+agent through wrapped servers.
 
 ---
 
@@ -358,12 +436,20 @@ anything ran. The full account is in `docs/development-notes.md`, "Phase 7".
 | Benchmark bridges and capture | complete |
 | Supervised comparison arms | complete |
 
-**461 tests collected; 460 pass with 1 skipped** — a held-out payload family, deselected by default
+**464 tests collected; 463 pass with 1 skipped** — a held-out payload family, deselected by default
 so detection rules cannot be iterated against it, and run explicitly with `-m holdout`.
 
-For the specification, the four ambiguities found in the paper and how each was resolved, and the
-full current measurements, see [`CLAUDE.md`](CLAUDE.md).
+### Where things live
+
+| document | audience | contents |
+|---|---|---|
+| **`README.md`** — this file | people | what it is, what it detects, what was measured, what the limits are |
+| [`CLAUDE.md`](CLAUDE.md) | coding agents, contributors | the contract: 20-dim index order, priors, rule definitions, invariants, commands |
+| [`GPT_GRID_RESULTS.md`](GPT_GRID_RESULTS.md) | anyone checking the numbers | every measurement in full, and how to reproduce it |
+| [`docs/development-notes.md`](docs/development-notes.md) | contributors | 42 numbered notes — the wrong turns, and why several defects are still open |
 
 ## License
 
 Apache-2.0, matching `mcpwall`. Not affiliated with the paper's authors, `mcpwall`, or Anthropic.
+
+Third-party material derived from the benchmarks is attributed in [`NOTICE`](NOTICE).

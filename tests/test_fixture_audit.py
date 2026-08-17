@@ -5,7 +5,7 @@ line labelled benign, so its failure modes matter more than its happy path. Two
 of these tests exist because the first implementation got them wrong:
 
 * an audit that matched no sessions exited 0, so a capture that recorded nothing
-  reported success -- the defect CLAUDE.md section 12 note 14 already recorded
+  reported success -- the defect docs/development-notes.md, note 14 already recorded
   once, reintroduced one layer up;
 * ``--out`` filtered on ``--source``, so cleaning a mixed day log silently threw
   away every ``research`` and ``devwork`` line.
@@ -30,7 +30,7 @@ _spec.loader.exec_module(fixture_audit)
 
 
 def line(session: str, tool: str, args, *, source: str = "bizops", call: int = 1) -> str:
-    """One trace line in the CLAUDE.md section 10 schema."""
+    """One trace line in the CLAUDE.md, "Trace / audit log format" schema."""
     return json.dumps(
         {
             "ts": "2026-07-30T09:00:00Z",
@@ -138,7 +138,7 @@ def test_an_audit_that_matched_no_sessions_is_not_a_pass(trace, exclusions):
 
     ``capture_bizops.sh`` runs the audit last, so exit 0 here means the whole
     capture reports success having written no trace at all -- the failure mode
-    CLAUDE.md section 12 note 14 was written about.
+    docs/development-notes.md, note 14 was written about.
     """
     path = trace(line("s1", "get_balance", {}, source="research"))
     assert fixture_audit.main(["--source", "bizops", str(path)]) != 0

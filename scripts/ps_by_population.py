@@ -41,7 +41,7 @@ import sys
 from collections import defaultdict
 from pathlib import Path
 
-#: Parameter Sensitivity, dim 5 of the 20-dim vector (CLAUDE.md section 5).
+#: Parameter Sensitivity, dim 5 of the 20-dim vector (CLAUDE.md, "The 20-dimensional feature vector (§IV-B, Table II)").
 PS_INDEX = 5
 
 

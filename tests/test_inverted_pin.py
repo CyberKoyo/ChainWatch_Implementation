@@ -97,7 +97,7 @@ def test_an_empty_benign_class_is_refused_rather_than_scored():
 def _write_traces(directory: Path) -> list[Path]:
     """Two sessions: one attack with three CRITICAL calls, one clean benign.
 
-    Written in the schema CLAUDE.md section 10 specifies, because both trace
+    Written in the schema CLAUDE.md, "Trace / audit log format" specifies, because both trace
     consumers group on ``session`` and skip any line whose ``v`` is not a list.
     """
     rows = [

@@ -1,7 +1,7 @@
 """Feature Extraction Layer tests -- ChainWatch section IV-B, Table II.
 
 Guards the vector contract every other module depends on. If these fail, the
-20-dim layout documented in CLAUDE.md section 5 has drifted from the code.
+20-dim layout documented in CLAUDE.md, "The 20-dimensional feature vector (§IV-B, Table II)" has drifted from the code.
 """
 
 from __future__ import annotations

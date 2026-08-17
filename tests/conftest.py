@@ -20,7 +20,7 @@ def pytest_collection_modifyitems(config, items):
     The held-out family is the only evidence that a rule generalises rather than
     fitting the family it was written against. Running it on every iteration
     would destroy that, which is how PS came to encode the generator rather than
-    the attack -- see CLAUDE.md section 12, phase 8.
+    the attack -- see docs/development-notes.md, "Phase 8".
     """
     if config.getoption("-m") == "holdout":
         return

@@ -31,7 +31,7 @@ DRY="${DRY:-0}"
 # capture_agentdojo.sh.
 export CLAUDE_CODE_DISABLE_LEGACY_MODEL_REMAP=1
 
-[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
+[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see README Quick start" >&2; exit 1; }
 [ -f "$RECIPES" ] || {
     echo "no recipe file at $RECIPES -- run scripts/gen_injecagent_recipes.py" >&2
     exit 1

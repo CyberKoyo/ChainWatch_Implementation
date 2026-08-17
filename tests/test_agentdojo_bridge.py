@@ -278,7 +278,7 @@ def test_server_map_covers_every_published_tool_and_splits_workspace():
 
     Hand-listing would rot silently when the vendored package moves a tool, and a
     stale map is a false topology, which is exactly the defect this task exists to
-    remove. See CLAUDE.md section 14 on `server` being asserted.
+    remove. See CLAUDE.md, "The capture executor" on `server` being asserted.
     """
     from agentdojo_bridge.adapter import AgentDojoAdapter
     from agentdojo_bridge.topology import server_map

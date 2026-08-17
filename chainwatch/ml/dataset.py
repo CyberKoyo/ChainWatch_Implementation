@@ -16,7 +16,7 @@ whether a tree over raw dimensions replaces the design.
 Two exclusions, both deliberate
 -------------------------------
 **TF dims 10-12.** ``call_rate`` reached 1816 calls/sec during batch replay
-(CLAUDE.md section 12, decision 7) because replay has no think-time. A model given
+(CLAUDE.md, "Locked decisions") because replay has no think-time. A model given
 those dimensions learns "fast is malicious", which is a property of the harness.
 
 **Session length.** The realism benign population averages 26.3 calls against the
@@ -394,7 +394,7 @@ def build(
             session_ids.append(session_id)
             # No manifest entry means a legacy population, where the session *is*
             # the only grouping available. Falling back keeps every existing number
-            # in CLAUDE.md section 12 reproducible while the benchmark populations
+            # in GPT_GRID_RESULTS.md reproducible while the benchmark populations
             # get the stronger grouping they need.
             group_ids.append(manifest_groups.get(session_id, session_id))
             source_ids.append(str(entry.get("source")))

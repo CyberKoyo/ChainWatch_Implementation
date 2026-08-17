@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Count destination provenance over NETWORK calls, by population.
 
-This is the measurement CLAUDE.md section 12 (Phase 13) says must be taken *before*
+This is the measurement docs/development-notes.md, "Phase 13" says must be taken *before*
 the candidate rule R3' is written, and it is deliberately a counting script rather
 than a module: it answers one question and the answer decides whether code gets
 written at all.
@@ -44,7 +44,7 @@ import sys
 from collections import Counter, defaultdict
 from pathlib import Path
 
-#: Index of the NETWORK one-hot in the 20-dim vector (CLAUDE.md section 5).
+#: Index of the NETWORK one-hot in the 20-dim vector (CLAUDE.md, "The 20-dimensional feature vector (§IV-B, Table II)").
 TC_NETWORK = 3
 
 #: Fixed column order, so a row always reads the same way.

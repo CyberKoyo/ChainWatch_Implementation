@@ -1,6 +1,6 @@
 """Tests for scripts/compliance_check.py -- the attack-compliance gate.
 
-CLAUDE.md section 12 note 35: an ``attack``-labelled session that performs the cover
+docs/development-notes.md, note 35: an ``attack``-labelled session that performs the cover
 task and drops the objective enters the corpus as a mislabeled benign row, which
 poisons the positive class the way an unlabelled session poisons the negative one.
 The gate exists to catch that, and the one case already on disk --
@@ -26,7 +26,7 @@ _spec.loader.exec_module(compliance_check)
 
 
 def line(session: str, tool: str, args, *, call: int = 1, source: str = "twinattack") -> str:
-    """One trace line in the CLAUDE.md section 10 schema, with args logged."""
+    """One trace line in the CLAUDE.md, "Trace / audit log format" schema, with args logged."""
     return json.dumps(
         {
             "ts": "2026-08-06T09:00:00Z",

@@ -12,7 +12,7 @@ it has drifted, because the exclusion list is a measurement. See
 ``agentdojo_bridge.adapter.UNSCORABLE_INJECTION_TASKS``. Recipes drop them, so no
 attack row is ever offered for one.
 
-This is CLAUDE.md §12 item 5's decidability check, done before any quota is spent --
+This is route E's pre-quota decidability check, done before any quota is spent --
 notes 23-25 measured three times over what skipping it costs.
 """
 

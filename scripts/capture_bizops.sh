@@ -46,7 +46,7 @@ MCP_CONFIG="$ROOT/.mcp.$PROFILE.json"
 # agent rather than by the task, and nothing on disk would say so.
 MODEL="${CHAINWATCH_MODEL:-claude-opus-5}"
 
-[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see CLAUDE.md §10" >&2; exit 1; }
+[ -x "$PYTHON" ] || { echo "no venv at $PYTHON -- see README Quick start" >&2; exit 1; }
 [ -f "$RECIPES" ] || { echo "no recipe file at $RECIPES" >&2; exit 1; }
 [ -f "$MCP_CONFIG" ] || { echo "no mcp config at $MCP_CONFIG for profile $PROFILE" >&2; exit 1; }
 [ -d "$ROOT/AgentLAB/SHADE_Arena" ] || {
@@ -103,7 +103,7 @@ daemon_alive || {
 # CLAUDE.md of its working directory, and this project's CLAUDE.md documents the
 # planted fixture entities, the exclusion list and what route C is measuring --
 # handing the subject of the experiment the experiment's own notes. Measured on the
-# attack half's first smoke run, where the refusal quoted CLAUDE.md §11 and
+# attack half's first smoke run, where the refusal quoted this repo's own CLAUDE.md and
 # docs/fixture_exclusions.txt by name. Both halves run neutral so the two
 # populations differ by their task and nothing else.
 WORKDIR="$STATE/agent-cwd"

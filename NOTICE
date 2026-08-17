@@ -1,0 +1,74 @@
+ChainWatch
+Copyright 2026 Koyo Keiter
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+------------------------------------------------------------------------------
+THIRD-PARTY MATERIAL
+------------------------------------------------------------------------------
+
+This repository does not vendor the benchmark checkouts it reads; they are
+gitignored and must be cloned separately (see README, "Vendored benchmarks").
+
+It does contain material *derived verbatim* from them: task prompts, injection
+payloads and fixture identifiers, reproduced so that the measurements in
+GPT_GRID_RESULTS.md can be checked. Those files are:
+
+    docs/recipes_agentdojo.tsv       AgentDojo user tasks, verbatim
+    docs/recipes_injecagent.tsv      InjecAgent user prompts, verbatim
+    docs/recipes_twin_attack.txt     SHADE_Arena user_query + secondary_task
+    docs/recipes_twin_benign.txt     SHADE_Arena user_query
+    docs/recipes_bizops.txt          written against SHADE_Arena fixtures
+    docs/fixture_exclusions.txt      SHADE_Arena planted entities
+    tests/test_features.py           one AgentDojo injection payload, as a fixture
+
+Each upstream project is MIT licensed. Their notices follow, as MIT requires.
+
+--- AgentDojo (https://github.com/ethz-spylab/agentdojo) ---
+
+Copyright (c) 2024 Edoardo Debenedetti, Jie Zhang, Mislav Balunovic,
+Luca Beurer-Kellner, Marc Fischer, and Florian Tramèr
+
+--- InjecAgent (https://github.com/uiuc-kang-lab/InjecAgent) ---
+
+Copyright (c) 2023 Qiusi Zhan
+
+--- AgentLAB (https://github.com/TanqiuJiang/AgentLAB) ---
+
+Copyright (c) 2026
+
+--- SHADE_Arena, vendored inside the AgentLAB checkout ---
+
+Copyright (c) 2025 Jonathan Kutasov, Joe Benton, Henry Sleight, John Hughes,
+Ethan Perez, Scale AI
+
+--- Agent_SafetyBench, vendored inside the AgentLAB checkout ---
+
+Copyright (c) 2025 thu-coai
+
+--- MIT License text, applying to all of the above ---
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+------------------------------------------------------------------------------
+
+The paper this project implements (arXiv:2607.19432) is NOT redistributed here.
+The arXiv perpetual non-exclusive licence grants arXiv the right to distribute
+it and does not extend that right to this repository. Read it at
+https://arxiv.org/abs/2607.19432.

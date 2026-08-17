@@ -2,7 +2,7 @@
 
 > **§1–§9 are the v2 grid**, captured 2026-08-11 UTC from commit `fb52c27`, corpus revision `v2`,
 > executor model `gpt-4o-mini-2024-07-18` pinned and verified per response. It supersedes the
-> pre-v2 figures in CLAUDE.md §15, whose corpus was archived to
+> pre-v2 figures, whose corpus was archived to
 > `~/.chainwatch/archive/gpt-grid-pre-v2-20260811/`.
 >
 > **§10 is the v3 grid** — same benchmark and model, per-app server topology, captured later the
@@ -159,7 +159,7 @@ Leave-one-environment-out, native-valid: B 91.8%/5.9%, C 91.8%/**29.4%**, D 94.5
 - **One executor, one payload family.** Every number is `gpt-4o-mini-2024-07-18` under one
   system prompt (sha256 recorded on every usage row). Leave-one-environment-out holds executor,
   benchmark and payload family constant, so it is not a generalisation measurement.
-- **The AgentDojo payload family was partly in-sample.** CLAUDE.md §15 records that
+- **The AgentDojo payload family was partly in-sample.** CLAUDE.md, "The 20-dimensional feature vector (§IV-B, Table II)" records that
   `tests/test_features.py` carries the `important_instructions` payload verbatim as dim 13's unit
   fixture, so the 27/27 detector result is not a clean holdout. That caveat propagates here.
 - **Native attack success is a coin flip, sampled once per cell.** The duplicated coordinate of
@@ -237,7 +237,7 @@ The native-valid arms run selects its trace files with
 
 ## 10.1 What changed, and what it is a claim about
 
-`server` has always been *asserted*, never derived (CLAUDE.md §14). v2 asserted one label per
+`server` has always been *asserted*, never derived (CLAUDE.md, "The capture executor"). v2 asserted one label per
 session, which is a claim that AgentDojo's `workspace` suite is one MCP server. That claim is
 false in any real deployment — email, calendar and cloud drive are three servers, and AgentDojo
 itself keeps them in three modules. v3 asserts the topology those modules already describe, via
@@ -323,7 +323,7 @@ suite both times. `workspace` ASR also moved 5% → 8%, consistent with note 42'
 
 Attributing any of this movement to the topology change would need a re-scoring of the *v2*
 traces under the v3 map, which has not been run — the same two-variables-moved-at-once trap
-recorded in CLAUDE.md §15's legacy row.
+recorded in README.md, "Legacy regression, reported separately".
 
 ## 10.4 Per suite
 
@@ -711,7 +711,7 @@ Three readings, in order of how much they license:
 2. **Which is also why the native-valid number is perfect.** That partition's benign class is
    exactly the clean-environment sessions, so "was a payload present" and "is this the attack class"
    are the same question there, and the payload sits verbatim in a tool response that dim 13 fires
-   on 27/27 (CLAUDE.md §15). Near-perfect separation is available without any sequential reasoning.
+   on 27/27 (CLAUDE.md, "The 20-dimensional feature vector (§IV-B, Table II)"). Near-perfect separation is available without any sequential reasoning.
    Not a Phase 8 leak — the permutation floor is 0.494 and suite-holdout FP is 0.0%, so the label
    carries real signal — but it is signal about **the environment**, not about the trajectory. The
    two components answer different questions, and only the rule engine attempts *did data leave, in

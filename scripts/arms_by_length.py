@@ -51,7 +51,7 @@ from chainwatch.ml.native import is_native_valid, native_outcomes  # noqa: E402
 
 #: Where the split falls. Declared as a constant rather than only a flag default because
 #: choosing it after seeing the result is how a stratification becomes a fishing
-#: expedition; 5 is the boundary of CLAUDE.md section 5's documented 4-7 call attack span.
+#: expedition; 5 is the boundary of the documented 4-7 call attack span (CLAUDE.md, "Sequential Pattern Analyzer (§IV-D)").
 LENGTH_SPLIT = 5
 
 #: A stratum thinner than this is not reported. At n=10 one session is ten percentage
@@ -74,14 +74,14 @@ def session_lengths(paths) -> dict[str, int]:
 
     Counted from the trace rather than the manifest's ``calls`` field so the denominator
     is the same rows the arms are built from. The two agree by construction (publication
-    requires native == executor == trace counts, CLAUDE.md section 14) and a divergence
+    requires native == executor == trace counts, CLAUDE.md, "The capture executor") and a divergence
     would mean a corpus defect worth failing on rather than papering over.
     """
     return {str(calls[0].get("session")): len(calls) for calls in load_sessions(paths)}
 
 
 def session_labels(paths) -> dict[str, str]:
-    """session id -> asserted label. Never inferred -- CLAUDE.md section 10."""
+    """session id -> asserted label. Never inferred -- CLAUDE.md, "Trace / audit log format"."""
     return {
         str(calls[0].get("session")): str(calls[0].get("label"))
         for calls in load_sessions(paths)

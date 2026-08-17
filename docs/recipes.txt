@@ -1,5 +1,5 @@
 # Route B task list -- one session per line, fed to `claude -p` by
-# scripts/capture_headless.sh. Rationale for each group is in traffic_recipes.md.
+# scripts/capture_headless.sh.
 #
 # Every task names real, public targets. None of them tells the agent which tools
 # to call in which order: the sequence has to come from the work, or the resulting

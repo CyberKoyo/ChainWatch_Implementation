@@ -36,7 +36,7 @@ def test_strata_partition_every_length_exactly_once():
 
 
 def test_the_split_is_a_named_constant_at_the_documented_attack_span():
-    """CLAUDE.md section 5 documents 4-7 call attacks; the split is its lower boundary.
+    """CLAUDE.md, "Sequential Pattern Analyzer (§IV-D)" documents 4-7 call attacks; the split is its lower boundary.
 
     Asserted because a split chosen after seeing the result is a fished stratification,
     and the defence against that is that the number is fixed in the module.

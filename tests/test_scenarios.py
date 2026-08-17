@@ -180,7 +180,7 @@ def test_s2_injection_flag_drives_stage_three():
 #
 # On severity: section IV-D makes R4 a WARNING, yet section V-B says S3 raises
 # CRITICAL. Both hold because redirect_all_messages is also a chained NETWORK call
-# at Stage 6, so R3 fires too. See CLAUDE.md section 3, ambiguity A2.
+# at Stage 6, so R3 fires too. See CLAUDE.md, ambiguity A2.
 # ---------------------------------------------------------------------------
 
 ORIGINAL_GET_FACT = [{"name": "get_fact", "description": "Return a harmless fact."}]

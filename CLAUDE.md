@@ -4,16 +4,25 @@ Implementation of **arXiv:2607.19432v1**, *"ChainWatch: A Kill Chain-Aligned Seq
 Framework for Multi-Step Attacks in MCP-Based AI Agent Systems"* (Narayan, Jyoti, Singh — 20 Jul
 2026), running underneath [`mcpwall`](https://mcpwall.dev) in the MCP stdio chain.
 
-This file describes the implemented behaviour: the specification as read, the four ambiguities in it
-and how each was resolved, the parameters the paper leaves unspecified, and what has been measured.
+> **Audience: coding agents and contributors.** This file is the contract — the 20-dim index order,
+> the priors, the rule definitions, the invariants that must not be violated, and the commands. It is
+> not the project's documentation. **[`README.md`](README.md)** explains what ChainWatch is, what was
+> measured and what the limits are; results detail is in `GPT_GRID_RESULTS.md`. If you are a person
+> rather than an agent, read those instead.
+
 It is written so that `chainwatch/engine/` can be ported to another language from this document
-alone.
+alone: the specification as read, the four ambiguities in it and how each was resolved, and the
+parameters the paper leaves unspecified.
 
 The executable contract is `tests/test_scenarios.py`, which encodes the paper's five §V-B scenarios
 verbatim and asserts exact stage labels and exact rule/call pairs. Prose can drift; that file cannot.
 
 Per-decision debugging history — 42 numbered notes cited from code comments and test docstrings —
-lives in **`docs/development-notes.md`**. Full measurement detail is in **`GPT_GRID_RESULTS.md`**.
+lives in **`docs/development-notes.md`**.
+
+**Reference this file by name, never by section number** — `CLAUDE.md, "Running it"`, not
+`CLAUDE.md` followed by an ordinal. Ordinals shift when a section is inserted and two dozen
+references once broke at once. `tests/test_doc_citations.py` enforces it.
 
 The paper is at <https://arxiv.org/abs/2607.19432>; §IV and §V are the implemented sections. Its
 full text is not redistributed here — the arXiv perpetual non-exclusive licence grants arXiv that
@@ -220,6 +229,12 @@ Notes:
 - **PS** reuses mcpwall's own secret regex corpus (13 patterns: AWS, GitHub, OpenAI, Anthropic,
   Stripe, JWT, Slack, private-key header, DB URLs) read from the installed `mcpwall` package's
   `rules/default.yml`, so the two layers agree on what "a secret" means.
+- **The Injection-stage detector floors are regression floors, not results. Do not weaken them.**
+  The published payload families are detected at 27/27 (AgentDojo `important_instructions`),
+  186/186 (InjecAgent `enhanced`) and 0/186 (InjecAgent `base`), with 0/186 on both benign twins.
+  The AgentDojo family is partly in-sample — its payload is a unit-test fixture in
+  `tests/test_features.py` — so it is a floor, never a generalisation measurement, and no write-up
+  may present it as one.
 
 ---
 
@@ -282,14 +297,19 @@ Both configurable.
 CRITICAL blocks the pending call by returning a JSON-RPC error upstream to mcpwall, which forwards it
 to the host.
 
-**R2 is measured and fails its own pre-registered threshold** (§13). Under a per-app topology it
-fires on **29.9% of benign sessions** against a threshold of 20% fixed before the capture. The rate
-is conditional on how finely servers are declared: one server per suite puts it at 0.0%.
+**Two rules carry measured caveats, and code or write-ups must respect them.**
 
-**R5 has no benign population anywhere in this project.** The published suites used for capture
-expose no CONFIGURE tool, so R5 is structurally 0/0 there; the one legitimate population that did
-exercise it is self-authored and therefore disqualified as evidence by §2's standing rule.
-OpenAgentSafety was measured as a candidate source and rejected (§13).
+- **R2 fails its own pre-registered threshold.** It fires on 29.9% of benign sessions under a
+  per-app topology, against a threshold of 20% fixed before that capture. The rate is a property of
+  the rule **and** the declared topology — one server per suite puts it at 0.0%. Never write "R2 has
+  an X% false-positive rate" without naming the topology it was measured under.
+- **R5 has no benign population anywhere in this project.** The published suites expose no CONFIGURE
+  tool, so R5 is structurally 0/0 there, and the one legitimate population that did exercise it is
+  self-authored and disqualified as evidence by the standing rule in "Locked decisions".
+  OpenAgentSafety was measured as a candidate source and rejected. **Treat R5's rate as unmeasured,
+  never as zero.**
+
+Figures are in `GPT_GRID_RESULTS.md`.
 
 ---
 
@@ -364,9 +384,8 @@ injecagent_bridge/  route F, DEV domain: loader.py (data/*.json only, src/ never
 scripts/            capture drivers, recipe generators, and the offline measurement tools.
                     Every measurement quoted in this file or in GPT_GRID_RESULTS.md is
                     reproducible from one of these; each is unit-tested.
-docs/               recipes (generated), fixture exclusions, traffic_recipes.md,
-                    development-notes.md
-tests/              461 collected; test_scenarios.py is the conformance gate
+docs/               recipes (generated), fixture exclusions, development-notes.md
+tests/              464 collected; test_scenarios.py is the conformance gate
 ```
 
 `engine/` deliberately knows nothing about MCP, sockets, or files. That keeps it unit-testable in
@@ -455,6 +474,10 @@ field present in one corpus can be absent from the other — which is what happe
 - **Session scoping.** `CHAINWATCH_SESSION` groups several proxied servers into one session id, which
   matters because with the daemon they share one k=10 window. Without it each proxy process gets its
   own uuid4 prefix.
+- **Populations are never pooled** — not two capture grids with each other, not either with any
+  legacy source. Each capture is a fresh set of draws rather than a rescoring, and every cell is
+  sampled once, so two grids' headline numbers are two draws from one rate rather than a before and
+  an after. Report them apart, always, and keep `source` populated so they stay separable.
 
 ---
 
@@ -477,6 +500,34 @@ field present in one corpus can be absent from the other — which is what happe
   file is the fallback, and `--settings` merges with the user's settings rather than replacing them.
 - Developed against Python 3.12, numpy 2.5, pytest 9.1.
 
+### The capture executor
+
+Benchmark capture runs through `chainwatch/capture/openai_mcp.py`, which owns the MCP JSON-RPC, the
+MCP → Chat Completions tool schemas, the bounded tool loop, exact cost accounting, and rejection of
+any response whose resolved model is not the pinned snapshot, before its tool calls reach MCP. Every
+capture argv is host runner → `mcpwall` → ChainWatch (`--observe-only --no-daemon --log-args`) →
+benchmark server.
+
+Two constraints on it are load-bearing for how the corpus may be read:
+
+- **`server` is asserted, never derived.** The proxy once named the server after the last argv
+  token, which would have made a leave-one-environment-out split unique-per-session on one route and
+  *label-correlated* on the other — the same species of defect as the session-length leak. Route E
+  now asserts it **per call** from AgentDojo's own tool-module partition
+  (`agentdojo_bridge/topology.py`, `--server-map`), and an unmapped module raises rather than falling
+  back. Still asserted rather than measured, but the assertion is derived from the upstream package
+  and is **a function of the suite alone**, so a benign row and its attack twin get identical maps
+  and the topology cannot carry the label.
+- **Publication is all-or-nothing.** A session is linked into the corpus only if executor status is
+  clean, the native score validates against its exact benchmark coordinates, and native call count
+  == executor count == trace rows. Anything else is quarantined outside the `*.jsonl` globs. A tool
+  call `mcpwall` rejects above ChainWatch never reaches the bridge, so those are counted separately
+  and excluded from `calls`, which is what keeps the three counts equal.
+
+**The system prompt is authored in this repo.** It is byte-identical across both halves and its
+sha256 is on every usage row, so it cannot carry a label — but it means sessions captured under a
+different host's own system prompt are not comparable with these, and must be reported apart.
+
 ### Vendored benchmarks
 
 None of these is redistributed here; all are gitignored. Clone them yourself to use the capture and
@@ -490,191 +541,12 @@ replay routes:
 | `OpenAgentSafety/` | 357 tasks, MIT | gate input only; measured and rejected, no bridge built |
 
 Without them, five modules fail or skip (`test_agentdojo_bridge`, `test_injecagent_bridge`,
-`test_recipe_generators`, `test_capture_drivers`, `test_injection_payloads`); the other **379 tests
+`test_recipe_generators`, `test_capture_drivers`, `test_injection_payloads`); the other **382 tests
 pass on numpy + pyyaml alone**. That is exactly what CI runs.
 
 ---
 
-## 12. Status
-
-| Phase | State | Tests |
-|---|---|---|
-| 1. Feature Extraction Layer | ✅ done | 104 |
-| 2. HMM stage classifier | ✅ done | 22 |
-| 3. Pattern Analyzer + S1–S5 gate | ✅ done | 40 |
-| 4. Proxy + daemon | ✅ done | 43 |
-| 5. Benchmark replay harness | ✅ done | — |
-| 6. Train + evaluate | ✅ done | — |
-| 7. Real benign corpus (SHADE task pairs) | ✅ done | — |
-| 8. XGBoost five-arm comparison | ✅ done | 33 |
-| 9–10. Live trace capture + capture profiles | ✅ done | (in phase 4) |
-| 11. Business-ops capture | 🔧 exploratory only — self-authored prompts, disqualified as evidence | 13 |
-| 13. Recipient provenance for R3 (§3, A4) | ✅ done — halves benign blocks; detection unchanged | 30 |
-| 14. R3′ gate | ✅ measured; **void, not passed** — deferred | 22 |
-| 15–16. Live attack half via the user-prompt channel | ❌ **unpurchasable** — 80–100% refusal | 6 |
-| 17. Indirect injection: route E (AgentDojo) + route F (InjecAgent) | ✅ bridges gated | 25 |
-| 18. Injection-stage observability audit | ✅ done | 12 |
-| 19. Grid readiness: manifest, resume/dedupe, native join, task-grouped folds | ✅ done | 35 |
-| 20. The v2 GPT-4o-mini grid | ✅ AgentDojo 452/452 | 7 |
-| 21. Per-call server topology → **R2 measurable** | ✅ v3 grid 452/452; dim 9 non-zero at last | 11 |
-| 22. OpenAgentSafety decidability gate (R5's missing population) | ✅ **measured and rejected** | 7 |
-
-**461 tests collected**; the full suite passes **460 with 1 skipped** — the held-out payload family,
-deselected by `tests/conftest.py` and run explicitly with `-m holdout` so rules cannot be iterated
-against it. `tests/test_ml.py` skips itself without the `[ml]` extra.
-
----
-
-## 13. What has been measured
-
-Full detail in **`GPT_GRID_RESULTS.md`**. Two grids exist; **they are never pooled**, because each is
-a fresh set of Bernoulli draws rather than a rescoring of the other.
-
-### The v3 grid — the primary result
-
-Model `gpt-4o-mini-2024-07-18`, pinned and verified per response. **452/452 coordinates, 0
-duplicated, 0 quarantined, 1924 calls, $0.4417.** Both classes come off **one generator** — same
-published task, same executor, same environment, same system prompt, differing only by whether the
-injection payload is served. That is what makes the arms below something other than a leak.
-
-Two denominators, both required:
-
-| | native-valid — *attacks that worked* | all-attempts — *injected environments* |
-|---|---|---|
-| attack sessions | 76 (published `security()`) | 355 |
-| **detected** | **74/76 = 97.4%** | 39.4% |
-| benign false positives | 4/38 = 10.5% (completed task) | 7.2% |
-
-Native attack success rate is **21.4%**. The gap between columns is sessions where the model refused;
-reporting only the second understates detection, reporting only the first hides that most served
-injections never became attacks. **Report both.**
-
-Per suite, **every missed successful attack is `slack`** — 2 of them on v3, 8 on v2, the same
-invariant across two independent draws. Both v3 misses are one injection task whose failing R3
-conjunct is dim 8, because `URL_RE` requires a scheme and the phishing link in that payload has none.
-
-### Per rule, under a per-app topology
-
-| | attack (n=355) | benign (n=97) |
-|---|---|---|
-| **R2** | **41.1%** | **29.9%** |
-| R1 / R3 / R4 | 12.7 / 41.1 / 58.9% | 11.3 / 17.5 / 25.8% |
-| R5 | **0%** | **0%** |
-
-R2's threshold was written before capture: *R2 on ≥20% of benign sessions makes it a false-positive
-engine on legitimate multi-service work.* Measured **29.9%** — §VI of the paper predicts it. Cost
-isolated inside the same sessions: 10.3% of benign sessions fire R2 *and nothing else*, against 4.5%
-of attack sessions. **R2 buys 4.5 points of attack coverage for 10.3 points of benign noise.**
-
-**The rate is conditional on the declared topology and any claim must say so.** One server per suite
-puts R2 at 0.0% in both classes; a finer split raises it. Supportable: *"R2 fires on 29.9% of benign
-sessions under a three-app workspace topology"* — never *"R2 has a 29.9% false-positive rate"*. Rate
-is a property of rule **and** deployment shape.
-
-R2 is WARNING, so it contributed nothing to any detection or blocking figure above.
-
-### The supervised arms
-
-B/C/D/E are one XGBoost (`max_depth=3, n_estimators=120, learning_rate=0.08`) over different feature
-groups; **A is the rule engine itself**, a hard predicate. Pinned to arm A's detection, native-valid:
-
-| arm | detection | FP | AUC | leave-one-environment-out FP |
-|---|---|---|---|---|
-| A rules | 91.8% | 17.6% | — | — |
-| B current+window | 93.2% | **0.0%** | 0.997 | 5.9% |
-| C hmm+rules | 91.8% | 23.5% | 0.928 | 29.4% |
-| D everything | 91.8% | **0.0%** | 0.998 | 5.9% |
-| E current only | 94.5% | **32.4%** | 0.876 | **70.6%** |
-| permutation floor | | | **0.478** | |
-
-1. **Arm E's collapse is the evidence against a leak.** A greedy depth-3 learner finds a per-call
-   shortcut immediately when one exists. Here the per-call arm is the *worst*, and only the window
-   features rescue it. The signal is sequential — ChainWatch's own thesis, supported by data.
-2. **C is dominated by A** while holding strictly more information: same detection, more false
-   positives. The HMM posteriors and rule firings compress worse than the window aggregates beneath
-   them and add nothing on top of them.
-3. **Inverting the pin changes the verdict.** Pinning detection and reading false positives cannot
-   say whether a learned model detects *more*. Fixing the false-positive budget instead, at arm A's
-   CRITICAL budget of 10.5%, **B and D detect 76/76 against the rule engine's 74/76** — arm A
-   dominated on both axes. But B flags 91.0% of all-attempts sessions, of which only 76 succeeded, so
-   **≥247 of its positives are refusals**: B recognises that *an injection was served*, not that the
-   agent was subverted. Real signal, about the environment rather than the trajectory.
-4. **A remains the deployable artifact** — no training data, no drift exposure. The arms are an upper
-   bound on extractable signal, not a shipping recommendation.
-
-### Per-call latency
-
-**3.9 ms per call at p50, 50 ms at p99, 85 ms max**, over real transcript responses. The Viterbi
-decode is the largest single stage (610 µs; `complete` re-decodes, so §IV-C costs 1.53 ms of the
-5.20 ms mean), and a one-row XGBoost `predict_proba` is 1.1 ms of wrapper overhead — so swapping the
-decoder for a booster is lateral, and arms C/D are strictly +23%. The largest component is neither:
-**40% is provenance and output-token bookkeeping**. Cost grows **1.9×** from call 1–2 to call 6+,
-since the window and the remembered-span store both only grow.
-
-### Route F (InjecAgent): unavailable, not zero
-
-117 sessions, **0/78 native attack success** (95% bound ≤3.8%), **1.00 calls on every session**, no
-rule fired in either class. All 78 read the payload and reported it back as data with zero refusal
-language — the model never declined because it never treated a tool response as an instruction. A
-one-call session cannot satisfy R3 or R5, so its 0% benign rate is a floor over content the
-deployment never sees. The published harness uses a ReAct text stream while this executor uses the
-Chat Completions `tool` role, so the honest claim is **"0/78 under tool-role delivery"**, never
-"gpt-4o-mini is immune to InjecAgent".
-
-### Injection-stage detector floors
-
-Regression floors. **These are floors, not results — do not weaken them.**
-
-| corpus response family | injection signal |
-|---|---:|
-| AgentDojo `important_instructions` attack payloads | **27/27** |
-| InjecAgent `base` attack responses | **0/186** |
-| InjecAgent `enhanced` attack responses | **186/186** |
-| InjecAgent benign twins, `base` / `enhanced` | **0/186 / 0/186** |
-
-**One limit on the 27/27, recorded because it cannot be undone.** `tests/test_features.py` carries
-AgentDojo's payload verbatim as dim 13's unit fixture, written as the failing test. The phrasing was
-therefore in the development loop before the holdout was ever spent: 27/27 is real but is **not** a
-clean generalisation measurement, and no write-up may claim the rules were developed against
-InjecAgent alone.
-
-### Legacy regression — reported separately, never pooled
-
-The AgentLAB replay (200 static attack chains plus two synthesized benign populations) predates the
-current primary populations, and its benign class was generated separately from its attack class —
-precisely the defect §14 describes. Under the current operational default it produces attack
-detection 47.5% / blocking 39.0%, and benign-realism detection/blocking 19.0% / 9.0%.
-
-**An earlier revision of this project published 0.0% false positives for that benign class. That
-number was an artifact and is retracted.** It was measured against a benign class that never chained
-a read into an outbound call — R3's signature — so 0.0% was guaranteed before anything ran. See
-`docs/development-notes.md`, "Phase 7".
-
----
-
-## 14. Limits
-
-- **One executor, one payload family, one benchmark.** Leave-one-environment-out holds all three
-  constant. Nothing here supports a claim about other models or other injection styles.
-- **Every grid cell is a single Bernoulli draw.** Read 89.0% (v2) and 97.4% (v3) as two draws from
-  one rate at n≈75, not as an improvement. Detection and false positives rose *together* between the
-  grids, which is the signature of resampling rather than of a change. Replication, not more
-  coordinates, is the next cheap measurement.
-- **The benign class under-completes.** 38 of 97 benign sessions achieved `utility`, so the
-  false-positive rate is measured partly over sessions that did little.
-- **The 27/27 injection-detector figure is partly in-sample**, as recorded above.
-- **R2's rate is a property of rule and topology together**, not of the rule.
-- **R5 has never been measured against legitimate traffic** from a source that passes §2's standing
-  rule. The gap is open and labelled.
-- **A signal can be sound as a rule and poisoned as a feature.** Provenance is load-bearing in the
-  rule engine, where it is compared against a session's own history, and was 83.6% of one arm's
-  importance while improving nothing — the signature of a leak.
-  `tests/test_ml.py::test_no_feature_correlates_with_session_length` asserts correlation, not range,
-  because asserting a feature's range proves nothing.
-
----
-
-## 15. Out of scope
+## 12. Out of scope
 
 - Modifying mcpwall (no plugin API; chaining is the only seam).
 - Running any benchmark's *attack generation* (needs vLLM + GPU + API keys). Only already-verified
@@ -684,7 +556,7 @@ a read into an outbound call — R3's signature — so 0.0% was guaranteed befor
 
 ---
 
-## 16. Development notes
+## 13. Development notes
 
 42 numbered notes record decisions that cost real debugging — each a wrong turn some test or
 measurement caught. **Numbers are permanent**: code comments and test docstrings cite them, and a

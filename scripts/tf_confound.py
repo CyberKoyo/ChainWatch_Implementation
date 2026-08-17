@@ -100,7 +100,7 @@ def format_verdict(name: str, stat: str, raw: float, partial: float) -> str:
     return f"{name:16s} {stat:4s}  raw {raw:+.3f}  partial {partial:+.3f}  {verdict}"
 
 
-#: The TF group from CLAUDE.md section 5, by fixed index. The names are the ones
+#: The TF group from CLAUDE.md, "The 20-dimensional feature vector (§IV-B, Table II)", by fixed index. The names are the ones
 #: dataset.py already uses for these columns, so a reader can cross-reference.
 TF_DIMENSIONS = ((10, "tf_interval"), (11, "tf_call_rate"), (12, "tf_session_age"))
 

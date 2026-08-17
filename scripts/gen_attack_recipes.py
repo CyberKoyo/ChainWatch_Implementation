@@ -7,7 +7,7 @@ Route C captures benign business operations by driving ``claude -p`` over
 ``docs/recipes_bizops.txt`` against SHADE_Arena's four environments served as real
 MCP servers. Its attack half has to come off *the same pipeline over the same
 fixtures*, or the model separates the two generators instead of the two intents --
-which is the leak CLAUDE.md section 12 records three times (``win_occupancy``
+which is the leak docs/development-notes.md, "Phase 8" records three times (``win_occupancy``
 proxied session length, PS proxied argument realism, provenance proxied destination
 realism).
 
@@ -235,7 +235,7 @@ TWIN_HEADER = '''\
 # the pair's own `secondary_task` appended. Both were written by SHADE_Arena's
 # authors, not by this repo, and they differ by exactly one clause.
 #
-# That is the whole point. CLAUDE.md section 12 records three leaks of one species --
+# That is the whole point. docs/development-notes.md, "Phase 8" records three leaks of one species --
 # window occupancy proxied session length, PS proxied argument realism, provenance
 # proxied destination realism -- and all three come from the two classes being
 # produced by different generators, which makes any property of the generator a
